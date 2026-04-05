@@ -130,7 +130,7 @@ def _get_device() -> torch.device | str:
 
 
 DEVICE = _get_device()
-DTYPE = torch.bfloat16
+DTYPE = torch.bfloat16 if not _IS_DARWIN else None
 
 def _resolve_app_data_dir() -> Path:
     env_path = os.environ.get("LTX_APP_DATA_DIR")
@@ -167,7 +167,12 @@ DEFAULT_APP_SETTINGS = AppSettings()
 
 from app_factory import DEFAULT_ALLOWED_ORIGINS, create_app
 from state import RuntimeConfig, build_initial_state
-from runtime_config.model_download_specs import DEFAULT_MODEL_DOWNLOAD_SPECS, DEFAULT_REQUIRED_MODEL_TYPES
+from runtime_config.model_download_specs import (
+    DEFAULT_MODEL_DOWNLOAD_SPECS,
+    DEFAULT_REQUIRED_MODEL_TYPES,
+    MLX_MODEL_DOWNLOAD_SPECS,
+    MLX_REQUIRED_MODEL_TYPES,
+)
 from runtime_config.runtime_policy import decide_force_api_generations
 from state.app_state_types import ModelFileType
 from server_utils.model_layout_migration import migrate_legacy_models_layout
@@ -201,8 +206,16 @@ def _resolve_force_api_generations() -> bool:
 
 
 FORCE_API_GENERATIONS = _resolve_force_api_generations()
+
+if _IS_DARWIN:
+    _MODEL_DOWNLOAD_SPECS = MLX_MODEL_DOWNLOAD_SPECS
+    _BASE_REQUIRED = MLX_REQUIRED_MODEL_TYPES
+else:
+    _MODEL_DOWNLOAD_SPECS = DEFAULT_MODEL_DOWNLOAD_SPECS
+    _BASE_REQUIRED = DEFAULT_REQUIRED_MODEL_TYPES
+
 REQUIRED_MODEL_TYPES: frozenset[ModelFileType] = (
-    frozenset() if FORCE_API_GENERATIONS else DEFAULT_REQUIRED_MODEL_TYPES
+    frozenset() if FORCE_API_GENERATIONS else _BASE_REQUIRED
 )
 
 CAMERA_MOTION_PROMPTS = {
@@ -222,7 +235,7 @@ DEFAULT_NEGATIVE_PROMPT = """blurry, out of focus, overexposed, underexposed, lo
 runtime_config = RuntimeConfig(
     device=DEVICE,
     default_models_dir=DEFAULT_MODELS_DIR,
-    model_download_specs=DEFAULT_MODEL_DOWNLOAD_SPECS,
+    model_download_specs=_MODEL_DOWNLOAD_SPECS,
     required_model_types=REQUIRED_MODEL_TYPES,
     outputs_dir=OUTPUTS_DIR,
     settings_file=SETTINGS_FILE,
@@ -273,7 +286,10 @@ def log_hardware_info() -> None:
     logger.info(f"Device: {DEVICE}  |  Dtype: {DTYPE}")
     logger.info(f"GPU: {gpu_info['name']}  |  VRAM: {vram_gb} GB")
     logger.info(f"SageAttention: {'enabled' if use_sage_attention else 'disabled'}")
-    logger.info(f"Python: {sys.version.split()[0]}  |  Torch: {torch.__version__}")
+    if _IS_DARWIN:
+        logger.info(f"Python: {sys.version.split()[0]}  |  Backend: MLX")
+    else:
+        logger.info(f"Python: {sys.version.split()[0]}  |  Torch: {torch.__version__}")
 
 
 if __name__ == "__main__":

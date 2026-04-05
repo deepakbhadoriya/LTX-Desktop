@@ -107,6 +107,43 @@ DEFAULT_REQUIRED_MODEL_TYPES: frozenset[ModelFileType] = frozenset(
     {"checkpoint", "upsampler", "zit"}
 )
 
+# MLX-native model specs for Apple Silicon (Darwin).
+# These replace the CUDA models when running on Mac with MLX inference.
+MLX_MODEL_DOWNLOAD_SPECS: dict[ModelFileType, ModelFileDownloadSpec] = {
+    "checkpoint": ModelFileDownloadSpec(
+        relative_path=Path("mlx-ltx-2.3-distilled-q4"),
+        expected_size_bytes=19_000_000_000,
+        is_folder=True,
+        repo_id="mlx-community/LTX-Video-2.3-distilled-Q4-mlx",
+        description="LTX 2.3 Distilled Q4 (MLX) — fast preview",
+    ),
+    "upsampler": ModelFileDownloadSpec(
+        relative_path=Path("mlx-ltx-2.3-spatial-upscaler-x2"),
+        expected_size_bytes=1_900_000_000,
+        is_folder=True,
+        repo_id="mlx-community/LTX-Video-2.3-upscaler-mlx",
+        description="2x Upscaler (MLX)",
+    ),
+    "text_encoder": ModelFileDownloadSpec(
+        relative_path=Path("mlx-gemma-3-12b-it-q4"),
+        expected_size_bytes=7_000_000_000,
+        is_folder=True,
+        repo_id="mlx-community/gemma-3-12b-it-4bit",
+        description="Gemma text encoder (MLX 4-bit)",
+    ),
+    "zit": ModelFileDownloadSpec(
+        relative_path=Path("mlx-flux-schnell"),
+        expected_size_bytes=8_000_000_000,
+        is_folder=True,
+        repo_id="mlx-community/FLUX.1-schnell-mlx",
+        description="Flux Schnell (MLX) for text-to-image generation",
+    ),
+}
+
+MLX_REQUIRED_MODEL_TYPES: frozenset[ModelFileType] = frozenset(
+    {"checkpoint", "upsampler", "zit"}
+)
+
 
 def _normalized_relative_path(
     specs: Mapping[ModelFileType, ModelFileDownloadSpec],
