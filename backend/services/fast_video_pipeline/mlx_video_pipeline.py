@@ -5,18 +5,23 @@ from __future__ import annotations
 import gc
 import logging
 import os
+from pathlib import Path
 from typing import Final
 
 from api_types import ImageConditioningInput
 
 logger = logging.getLogger(__name__)
 
+# Default HF repo IDs for mlx_video — overridden if local paths exist.
+_DEFAULT_MODEL_REPO = "Lightricks/LTX-Video-2.3-distilled"
+_DEFAULT_TEXT_ENCODER_REPO = "Lightricks/gemma-3-12b-it-qat-q4_0-unquantized"
+
 
 class MLXVideoPipeline:
-    """Fast video generation pipeline using MLX on Apple Silicon.
+    """Fast video generation pipeline using mlx_video on Apple Silicon.
 
-    Drop-in replacement for LTXFastVideoPipeline that uses mlx_video
-    instead of CUDA-based ltx_pipelines for local inference on Mac.
+    Uses the mlx_video.models.ltx_2.generate.generate_video() function
+    which handles model loading, text encoding, inference, and video output.
     """
 
     pipeline_kind: Final = "fast"
@@ -44,25 +49,11 @@ class MLXVideoPipeline:
         self._checkpoint_path = checkpoint_path
         self._gemma_root = gemma_root
         self._upsampler_path = upsampler_path
-        self._pipeline: object | None = None
 
-    def _ensure_pipeline(self) -> object:
-        """Lazily load the mlx_video pipeline on first use."""
-        if self._pipeline is not None:
-            return self._pipeline
-
-        logger.info("Loading MLX video pipeline from: %s", self._checkpoint_path)
-
-        from mlx_video import LTXVideo  # type: ignore[import-untyped]
-
-        self._pipeline = LTXVideo(
-            checkpoint_path=self._checkpoint_path,
-            gemma_root=self._gemma_root,
-            upsampler_path=self._upsampler_path,
-        )
-
-        logger.info("MLX video pipeline loaded successfully")
-        return self._pipeline
+        # Resolve model repo: use parent dir as HF repo if local, else default.
+        checkpoint_dir = Path(checkpoint_path).parent
+        self._model_repo = str(checkpoint_dir) if checkpoint_dir.exists() else _DEFAULT_MODEL_REPO
+        self._text_encoder_repo = str(gemma_root) if gemma_root and Path(gemma_root).exists() else _DEFAULT_TEXT_ENCODER_REPO
 
     def _run_inference(
         self,
@@ -75,26 +66,31 @@ class MLXVideoPipeline:
         images: list[ImageConditioningInput],
         output_path: str,
     ) -> None:
-        """Run inference via mlx_video and write output to file."""
-        import mlx.core as mx  # type: ignore[import-untyped]
+        """Run inference via mlx_video generate_video() and write output."""
+        from mlx_video.models.ltx_2.generate import generate_video, PipelineType  # type: ignore[import-untyped]
 
-        pipeline = self._ensure_pipeline()
+        image_path: str | None = None
+        image_strength: float = 0.8
+        image_frame_idx: int = 0
+        if images:
+            image_path = images[0].path
+            image_strength = images[0].strength
+            image_frame_idx = images[0].frame_idx
 
-        image_inputs = [
-            {"path": img.path, "frame_idx": img.frame_idx, "strength": img.strength}
-            for img in images
-        ]
-
-        mx.random.seed(seed)
-        pipeline(  # type: ignore[operator]
+        generate_video(
+            model_repo=self._model_repo,
+            text_encoder_repo=self._text_encoder_repo,
             prompt=prompt,
-            seed=seed,
+            pipeline=PipelineType.DISTILLED,
             height=height,
             width=width,
             num_frames=num_frames,
-            frame_rate=frame_rate,
-            images=image_inputs,
+            seed=seed,
+            fps=int(frame_rate),
             output_path=output_path,
+            image_path=image_path,
+            image_strength=image_strength,
+            image_frame_index=image_frame_idx,
         )
 
     def generate(

@@ -4,18 +4,20 @@ from __future__ import annotations
 
 import gc
 import logging
-import os
-from typing import Any
+from pathlib import Path
 
 from api_types import ImageConditioningInput
 
 logger = logging.getLogger(__name__)
 
+_DEFAULT_MODEL_REPO = "Lightricks/LTX-Video-2.3-distilled"
+_DEFAULT_TEXT_ENCODER_REPO = "Lightricks/gemma-3-12b-it-qat-q4_0-unquantized"
+
 
 class MLXa2vPipeline:
-    """Audio-to-video generation pipeline using MLX on Apple Silicon.
+    """Audio-to-video generation pipeline using mlx_video on Apple Silicon.
 
-    Replaces LTXa2vPipeline which uses CUDA-based ltx_pipelines.
+    Uses generate_video() with audio_path parameter for A2V generation.
     """
 
     @staticmethod
@@ -25,7 +27,7 @@ class MLXa2vPipeline:
         upsampler_path: str,
         device: object,
     ) -> "MLXa2vPipeline":
-        del device  # MLX uses Metal GPU automatically
+        del device
         return MLXa2vPipeline(
             checkpoint_path=checkpoint_path,
             gemma_root=gemma_root,
@@ -41,25 +43,10 @@ class MLXa2vPipeline:
         self._checkpoint_path = checkpoint_path
         self._gemma_root = gemma_root
         self._upsampler_path = upsampler_path
-        self._pipeline: object | None = None
 
-    def _ensure_pipeline(self) -> object:
-        """Lazily load the mlx_video A2V pipeline on first use."""
-        if self._pipeline is not None:
-            return self._pipeline
-
-        logger.info("Loading MLX A2V pipeline from: %s", self._checkpoint_path)
-
-        from mlx_video import LTXA2V  # type: ignore[import-untyped]
-
-        self._pipeline = LTXA2V(
-            checkpoint_path=self._checkpoint_path,
-            gemma_root=self._gemma_root,
-            upsampler_path=self._upsampler_path,
-        )
-
-        logger.info("MLX A2V pipeline loaded successfully")
-        return self._pipeline
+        checkpoint_dir = Path(checkpoint_path).parent
+        self._model_repo = str(checkpoint_dir) if checkpoint_dir.exists() else _DEFAULT_MODEL_REPO
+        self._text_encoder_repo = str(gemma_root) if gemma_root and Path(gemma_root).exists() else _DEFAULT_TEXT_ENCODER_REPO
 
     def generate(
         self,
@@ -78,35 +65,37 @@ class MLXa2vPipeline:
         output_path: str,
     ) -> None:
         """Generate video from audio input via MLX."""
-        import mlx.core as mx  # type: ignore[import-untyped]
+        from mlx_video.models.ltx_2.generate import generate_video, PipelineType  # type: ignore[import-untyped]
 
         logger.info(
             "MLX A2V generate: prompt=%r seed=%d %dx%d %d frames",
             prompt[:50], seed, width, height, num_frames,
         )
 
-        pipeline = self._ensure_pipeline()
+        image_path: str | None = None
+        image_strength: float = 0.8
+        if images:
+            image_path = images[0].path
+            image_strength = images[0].strength
 
-        image_inputs = [
-            {"path": img.path, "frame_idx": img.frame_idx, "strength": img.strength}
-            for img in images
-        ]
-
-        mx.random.seed(seed)
-        pipeline(  # type: ignore[operator]
+        generate_video(
+            model_repo=self._model_repo,
+            text_encoder_repo=self._text_encoder_repo,
             prompt=prompt,
             negative_prompt=negative_prompt,
-            seed=seed,
+            pipeline=PipelineType.DISTILLED,
             height=height,
             width=width,
             num_frames=num_frames,
-            frame_rate=frame_rate,
             num_inference_steps=num_inference_steps,
-            images=image_inputs,
+            seed=seed,
+            fps=int(frame_rate),
+            output_path=output_path,
+            image_path=image_path,
+            image_strength=image_strength,
             audio_path=audio_path,
             audio_start_time=audio_start_time,
             audio_max_duration=audio_max_duration,
-            output_path=output_path,
         )
 
         gc.collect()

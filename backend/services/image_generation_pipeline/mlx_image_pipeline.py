@@ -1,4 +1,4 @@
-"""MLX image generation pipeline using mflux (Flux Schnell) on Apple Silicon."""
+"""MLX image generation pipeline using mflux (Z-Image-Turbo) on Apple Silicon."""
 
 from __future__ import annotations
 
@@ -18,10 +18,9 @@ class _MfluxOutput:
 
 
 class MLXImageGenerationPipeline:
-    """Image generation pipeline using mflux (Flux) on Apple Silicon.
+    """Image generation pipeline using mflux Z-Image-Turbo on Apple Silicon.
 
     Replaces ZitImageGenerationPipeline which uses CUDA-based diffusers.
-    Uses the mflux library for Flux Schnell inference on MLX.
     """
 
     @staticmethod
@@ -37,17 +36,17 @@ class MLXImageGenerationPipeline:
         self._pipeline: object | None = None
 
     def _ensure_pipeline(self) -> object:
-        """Lazily load the mflux pipeline on first use."""
+        """Lazily load the mflux Z-Image-Turbo pipeline on first use."""
         if self._pipeline is not None:
             return self._pipeline
 
-        logger.info("Loading mflux image pipeline from: %s", self._model_path)
+        logger.info("Loading mflux Z-Image-Turbo from: %s", self._model_path)
 
-        from mflux import Flux1  # type: ignore[import-untyped]
+        from mflux.models.z_image import ZImageTurbo  # type: ignore[import-untyped]
 
-        self._pipeline = Flux1.from_alias("schnell", path=self._model_path)
+        self._pipeline = ZImageTurbo(model_path=self._model_path)
 
-        logger.info("mflux image pipeline loaded successfully")
+        logger.info("mflux Z-Image-Turbo loaded successfully")
         return self._pipeline
 
     def generate(
@@ -60,21 +59,18 @@ class MLXImageGenerationPipeline:
         seed: int,
     ) -> ImagePipelineOutputLike:
         """Generate an image from a text prompt via mflux."""
-        import mlx.core as mx  # type: ignore[import-untyped]
-
-        _ = guidance_scale  # Flux Schnell ignores guidance_scale
+        _ = guidance_scale  # Z-Image-Turbo ignores guidance_scale
 
         logger.info("MLX image generate: prompt=%r %dx%d seed=%d", prompt[:50], width, height, seed)
 
         pipeline = self._ensure_pipeline()
 
-        mx.random.seed(seed)
         image = pipeline.generate_image(  # type: ignore[union-attr]
             prompt=prompt,
-            height=height,
-            width=width,
-            num_inference_steps=num_inference_steps,
             seed=seed,
+            num_inference_steps=num_inference_steps,
+            width=width,
+            height=height,
         )
 
         gc.collect()
