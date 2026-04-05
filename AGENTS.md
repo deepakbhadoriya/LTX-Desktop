@@ -81,6 +81,98 @@ Key patterns:
 - Pyright strict mode (`backend/pyrightconfig.json`)
 - Dependencies in `backend/pyproject.toml`
 
+---
+
+## MLX Studio — Fork-Specific Guidelines
+
+> This is a fork of LTX Desktop. Goal: Replace CUDA backend with MLX for native Apple Silicon local generation.
+
+### What We Change vs What Stays
+
+| Layer | Modify? | Reason |
+|-------|---------|--------|
+| `frontend/*` | **NO** | UI is device-agnostic |
+| `electron/*` | **MINIMAL** | Only GPU detection in `gpu.ts` |
+| `backend/_routes/*` | **NO** | Routes are thin plumbing |
+| `backend/handlers/*` | **NO** | Business logic is device-agnostic |
+| `backend/services/*` | **YES** | Replace CUDA pipeline implementations with MLX |
+| `backend/runtime_config/*` | **YES** | Update model specs for MLX models |
+| `backend/app_handler.py` | **YES** | Update `build_default_service_bundle()` |
+
+### New MLX Service Files to Create
+
+```
+backend/services/
+├── fast_video_pipeline/
+│   └── mlx_video_pipeline.py      # Replaces LTXFastVideoPipeline
+├── gpu_cleaner/
+│   └── mlx_cleaner.py             # Replaces TorchCleaner
+├── gpu_info/
+│   └── gpu_info_impl.py           # Extend with MLX detection (modify existing)
+├── text_encoder/
+│   └── mlx_text_encoder.py        # Replaces LTXTextEncoder
+├── a2v_pipeline/
+│   └── mlx_a2v_pipeline.py        # Replaces LTXa2vPipeline
+├── retake_pipeline/
+│   └── mlx_retake_pipeline.py     # Replaces LTXRetakePipeline
+├── ic_lora_pipeline/
+│   └── mlx_ic_lora_pipeline.py    # Replaces LTXIcLoraPipeline
+└── image_generation_pipeline/
+    └── mlx_image_pipeline.py      # Replaces ZitImageGenerationPipeline (uses mflux)
+```
+
+### MLX Implementation Rules
+
+1. **Protocol compliance**: Every new service MUST implement the same Protocol from `interfaces.py`
+2. **Lazy imports**: Import `mlx`, `mlx_video`, `mflux` inside `__init__` or method body, NEVER at module top level
+3. **Same API contract**: Frontend/handlers don't know the backend changed — same request/response schemas
+4. **Device abstraction**: Extend `services_utils.py` with MLX device type support
+5. **Memory monitoring**: Use `psutil.virtual_memory()` for Apple Silicon unified memory reporting
+6. **No torch dependency**: MLX pipelines must NOT import torch (remove CUDA/MPS code paths)
+7. **Seed handling**: Use `mlx.core.random.seed()` instead of `torch.Generator`
+8. **Cleanup**: Use `gc.collect()` for MLX memory cleanup (no `torch.cuda.empty_cache()`)
+
+### ServiceBundle Wiring
+
+All service swaps happen in ONE place — `app_handler.py::build_default_service_bundle()`:
+
+```python
+# Before (CUDA)
+ServiceBundle(
+    fast_video_pipeline_class=LTXFastVideoPipeline,
+    gpu_cleaner=TorchCleaner(device=config.device),
+    ...
+)
+
+# After (MLX)
+ServiceBundle(
+    fast_video_pipeline_class=MLXVideoPipeline,
+    gpu_cleaner=MLXCleaner(),
+    ...
+)
+```
+
+### Testing New MLX Services
+
+1. Create `FakeMLXVideoPipeline` in `tests/fakes/services.py`
+2. Wire fake in `conftest.py` via `ServiceBundle`
+3. Run existing tests — they should pass with fakes (no real MLX needed)
+4. Add MLX-specific integration tests for new edge cases
+
+### Model Download Specs (MLX)
+
+Update `runtime_config/model_download_specs.py`:
+- LTX 2.3 Distilled Q4 MLX (~19GB) — fast preview
+- LTX 2.3 Dev Q5 MLX (~25GB) — high quality
+- Flux Schnell MLX (~8GB) — image generation (via mflux)
+
+### Environment Variables for MLX
+
+```bash
+MLX_GPU_MEMORY_FRACTION=0.9    # Use 90% of unified memory
+PYTORCH_ENABLE_MPS_FALLBACK=1  # Keep for any remaining torch ops
+```
+
 ## Key File Locations
 
 - Backend architecture doc: `backend/architecture.md`

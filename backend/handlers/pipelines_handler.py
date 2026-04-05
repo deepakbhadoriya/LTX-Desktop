@@ -103,8 +103,8 @@ class PipelinesHandler(StateHandlerBase):
             return state
         if state.is_compiled:
             return state
-        if self._runtime_device == "mps":
-            logger.info("Skipping torch.compile() for %s - not supported on MPS", state.pipeline.pipeline_kind)
+        if self._runtime_device in ("mps", "mlx"):
+            logger.info("Skipping torch.compile() for %s - not supported on %s", state.pipeline.pipeline_kind, self._runtime_device)
             return state
 
         try:

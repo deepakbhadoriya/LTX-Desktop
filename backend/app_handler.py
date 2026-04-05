@@ -241,28 +241,47 @@ class ServiceBundle:
 
 def build_default_service_bundle(config: RuntimeConfig) -> ServiceBundle:
     """Build real runtime services with lazy heavy imports isolated from tests."""
-    from services.fast_video_pipeline.ltx_fast_video_pipeline import LTXFastVideoPipeline
+    import platform
+
     from services.zit_api_client.zit_api_client_impl import ZitAPIClientImpl
-    from services.gpu_cleaner.torch_cleaner import TorchCleaner
     from services.gpu_info.gpu_info_impl import GpuInfoImpl
     from services.http_client.http_client_impl import HTTPClientImpl
-    from services.a2v_pipeline.ltx_a2v_pipeline import LTXa2vPipeline
-    from services.depth_processor_pipeline.midas_dpt_pipeline import MidasDPTPipeline
-    from services.ic_lora_pipeline.ltx_ic_lora_pipeline import LTXIcLoraPipeline
-    from services.image_generation_pipeline.zit_image_generation_pipeline import ZitImageGenerationPipeline
     from services.ltx_api_client.ltx_api_client_impl import LTXAPIClientImpl
     from services.model_downloader.hugging_face_downloader import HuggingFaceDownloader
-    from services.retake_pipeline.ltx_retake_pipeline import LTXRetakePipeline
-    from services.pose_processor_pipeline.dw_pose_pipeline import DWPosePipeline
     from services.task_runner.threading_runner import ThreadingRunner
     from services.text_encoder.ltx_text_encoder import LTXTextEncoder
     from services.video_processor.video_processor_impl import VideoProcessorImpl
+
+    if platform.system() == "Darwin":
+        from services.fast_video_pipeline.mlx_video_pipeline import MLXVideoPipeline
+        from services.gpu_cleaner.mlx_cleaner import MLXCleaner
+        from services.a2v_pipeline.ltx_a2v_pipeline import LTXa2vPipeline
+        from services.depth_processor_pipeline.midas_dpt_pipeline import MidasDPTPipeline
+        from services.ic_lora_pipeline.ltx_ic_lora_pipeline import LTXIcLoraPipeline
+        from services.image_generation_pipeline.zit_image_generation_pipeline import ZitImageGenerationPipeline
+        from services.retake_pipeline.ltx_retake_pipeline import LTXRetakePipeline
+        from services.pose_processor_pipeline.dw_pose_pipeline import DWPosePipeline
+
+        fast_pipeline_class: type[FastVideoPipeline] = MLXVideoPipeline
+        gpu_cleaner: GpuCleaner = MLXCleaner()
+    else:
+        from services.fast_video_pipeline.ltx_fast_video_pipeline import LTXFastVideoPipeline
+        from services.gpu_cleaner.torch_cleaner import TorchCleaner
+        from services.a2v_pipeline.ltx_a2v_pipeline import LTXa2vPipeline
+        from services.depth_processor_pipeline.midas_dpt_pipeline import MidasDPTPipeline
+        from services.ic_lora_pipeline.ltx_ic_lora_pipeline import LTXIcLoraPipeline
+        from services.image_generation_pipeline.zit_image_generation_pipeline import ZitImageGenerationPipeline
+        from services.retake_pipeline.ltx_retake_pipeline import LTXRetakePipeline
+        from services.pose_processor_pipeline.dw_pose_pipeline import DWPosePipeline
+
+        fast_pipeline_class = LTXFastVideoPipeline
+        gpu_cleaner = TorchCleaner(device=config.device)
 
     http = HTTPClientImpl()
 
     return ServiceBundle(
         http=http,
-        gpu_cleaner=TorchCleaner(device=config.device),
+        gpu_cleaner=gpu_cleaner,
         model_downloader=HuggingFaceDownloader(),
         gpu_info=GpuInfoImpl(),
         video_processor=VideoProcessorImpl(),
@@ -274,7 +293,7 @@ def build_default_service_bundle(config: RuntimeConfig) -> ServiceBundle:
         task_runner=ThreadingRunner(),
         ltx_api_client=LTXAPIClientImpl(http=http, ltx_api_base_url=config.ltx_api_base_url),
         zit_api_client=ZitAPIClientImpl(http=http),
-        fast_video_pipeline_class=LTXFastVideoPipeline,
+        fast_video_pipeline_class=fast_pipeline_class,
         image_generation_pipeline_class=ZitImageGenerationPipeline,
         ic_lora_pipeline_class=LTXIcLoraPipeline,
         depth_processor_pipeline_class=MidasDPTPipeline,

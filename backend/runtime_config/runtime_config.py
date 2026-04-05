@@ -5,8 +5,10 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-import torch
+if TYPE_CHECKING:
+    import torch
 
 from runtime_config.model_download_specs import ModelFileDownloadSpec
 from state.app_state_types import ModelFileType
@@ -14,7 +16,7 @@ from state.app_state_types import ModelFileType
 
 @dataclass
 class RuntimeConfig:
-    device: torch.device
+    device: torch.device | str
     default_models_dir: Path
     model_download_specs: Mapping[ModelFileType, ModelFileDownloadSpec]
     required_model_types: frozenset[ModelFileType]

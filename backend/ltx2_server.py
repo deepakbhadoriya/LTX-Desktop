@@ -26,14 +26,20 @@ import threading
 
 # Note: expandable_segments is not supported on all platforms
 
+import platform as _platform
+
+_IS_DARWIN = _platform.system() == "Darwin"
+
 import torch
 
-import services.patches.record_stream_fix as _record_stream_fix  # pyright: ignore[reportUnusedImport]  # Remove once ltx-core includes the fix
-del _record_stream_fix
-import services.patches.safetensors_loader_fix as _safetensors_loader_fix  # pyright: ignore[reportUnusedImport]  # Remove once safetensors/PyTorch fix the mmap issue
-del _safetensors_loader_fix
-import services.patches.safetensors_metadata_fix as _safetensors_metadata_fix  # pyright: ignore[reportUnusedImport]  # Remove once safetensors supports read-only mmap
-del _safetensors_metadata_fix
+# CUDA-specific patches — skip on macOS where we use MLX instead.
+if not _IS_DARWIN:
+    import services.patches.record_stream_fix as _record_stream_fix  # pyright: ignore[reportUnusedImport]  # Remove once ltx-core includes the fix
+    del _record_stream_fix
+    import services.patches.safetensors_loader_fix as _safetensors_loader_fix  # pyright: ignore[reportUnusedImport]  # Remove once safetensors/PyTorch fix the mmap issue
+    del _safetensors_loader_fix
+    import services.patches.safetensors_metadata_fix as _safetensors_metadata_fix  # pyright: ignore[reportUnusedImport]  # Remove once safetensors supports read-only mmap
+    del _safetensors_metadata_fix
 
 from state.app_settings import AppSettings
 
@@ -56,7 +62,7 @@ logger = logging.getLogger(__name__)
 # ============================================================
 # SageAttention Integration
 # ============================================================
-use_sage_attention = os.environ.get("USE_SAGE_ATTENTION", "1") == "1"
+use_sage_attention = os.environ.get("USE_SAGE_ATTENTION", "1") == "1" and not _IS_DARWIN
 _sageattention_runtime_fallback_logged = False
 
 if use_sage_attention:
@@ -113,7 +119,9 @@ if use_sage_attention:
 PORT = 0
 
 
-def _get_device() -> torch.device:
+def _get_device() -> torch.device | str:
+    if _IS_DARWIN:
+        return "mlx"
     if torch.cuda.is_available():
         return torch.device("cuda")
     if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():

@@ -45,6 +45,9 @@ def get_device_type(device: str | torch.device | object | None) -> str:
     if device is None:
         return "cpu"
 
+    if isinstance(device, str) and device == "mlx":
+        return "mlx"
+
     device_type = getattr(device, "type", None)
     if isinstance(device_type, str):
         return device_type
@@ -93,6 +96,11 @@ def empty_device_cache(device: str | torch.device | object | None) -> None:
             torch.mps.empty_cache()
         except Exception:
             logger.warning("torch.mps.empty_cache() failed", exc_info=True)
+        return
+
+    if device_type == "mlx":
+        import gc
+        gc.collect()
 
 
 class LatentStateLike(Protocol):

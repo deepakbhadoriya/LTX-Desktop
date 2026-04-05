@@ -2,12 +2,9 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Protocol
+from typing import Protocol
 
 from api_types import ImageConditioningInput
-
-if TYPE_CHECKING:
-    import torch
 
 
 class A2VPipeline(Protocol):
@@ -16,7 +13,7 @@ class A2VPipeline(Protocol):
         checkpoint_path: str,
         gemma_root: str | None,
         upsampler_path: str,
-        device: torch.device,
+        device: object,
     ) -> "A2VPipeline": ...
 
     def generate(
