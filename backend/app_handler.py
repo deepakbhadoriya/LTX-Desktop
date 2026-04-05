@@ -251,9 +251,6 @@ def build_default_service_bundle(config: RuntimeConfig) -> ServiceBundle:
     from services.task_runner.threading_runner import ThreadingRunner
     from services.video_processor.video_processor_impl import VideoProcessorImpl
 
-    from services.depth_processor_pipeline.midas_dpt_pipeline import MidasDPTPipeline
-    from services.pose_processor_pipeline.dw_pose_pipeline import DWPosePipeline
-
     http = HTTPClientImpl()
 
     if platform.system() == "Darwin":
@@ -264,6 +261,8 @@ def build_default_service_bundle(config: RuntimeConfig) -> ServiceBundle:
         from services.retake_pipeline.mlx_retake_pipeline import MLXRetakePipeline
         from services.ic_lora_pipeline.mlx_ic_lora_pipeline import MLXIcLoraPipeline
         from services.image_generation_pipeline.mlx_image_pipeline import MLXImageGenerationPipeline
+        from services.depth_processor_pipeline.mlx_depth_pipeline import MLXDepthPipeline
+        from services.pose_processor_pipeline.noop_pose_pipeline import NoopPosePipeline
 
         fast_pipeline_class: type[FastVideoPipeline] = MLXVideoPipeline  # pyright: ignore[reportAssignmentType]
         gpu_cleaner_instance: GpuCleaner = MLXCleaner()
@@ -272,6 +271,8 @@ def build_default_service_bundle(config: RuntimeConfig) -> ServiceBundle:
         a2v_class: type[A2VPipeline] = MLXa2vPipeline  # pyright: ignore[reportAssignmentType]
         retake_class: type[RetakePipeline] = MLXRetakePipeline  # pyright: ignore[reportAssignmentType]
         ic_lora_class: type[IcLoraPipeline] = MLXIcLoraPipeline  # pyright: ignore[reportAssignmentType]
+        depth_class: type[DepthProcessorPipeline] = MLXDepthPipeline  # pyright: ignore[reportAssignmentType]
+        pose_class: type[PoseProcessorPipeline] = NoopPosePipeline  # pyright: ignore[reportAssignmentType]
     else:
         from services.fast_video_pipeline.ltx_fast_video_pipeline import LTXFastVideoPipeline
         from services.gpu_cleaner.torch_cleaner import TorchCleaner
@@ -280,6 +281,8 @@ def build_default_service_bundle(config: RuntimeConfig) -> ServiceBundle:
         from services.retake_pipeline.ltx_retake_pipeline import LTXRetakePipeline
         from services.ic_lora_pipeline.ltx_ic_lora_pipeline import LTXIcLoraPipeline
         from services.image_generation_pipeline.zit_image_generation_pipeline import ZitImageGenerationPipeline
+        from services.depth_processor_pipeline.midas_dpt_pipeline import MidasDPTPipeline
+        from services.pose_processor_pipeline.dw_pose_pipeline import DWPosePipeline
 
         fast_pipeline_class = LTXFastVideoPipeline  # pyright: ignore[reportAssignmentType]
         gpu_cleaner_instance = TorchCleaner(device=config.device)
@@ -292,6 +295,8 @@ def build_default_service_bundle(config: RuntimeConfig) -> ServiceBundle:
         a2v_class = LTXa2vPipeline  # pyright: ignore[reportAssignmentType]
         retake_class = LTXRetakePipeline  # pyright: ignore[reportAssignmentType]
         ic_lora_class = LTXIcLoraPipeline  # pyright: ignore[reportAssignmentType]
+        depth_class = MidasDPTPipeline  # pyright: ignore[reportAssignmentType]
+        pose_class = DWPosePipeline  # pyright: ignore[reportAssignmentType]
 
     return ServiceBundle(
         http=http,
@@ -306,8 +311,8 @@ def build_default_service_bundle(config: RuntimeConfig) -> ServiceBundle:
         fast_video_pipeline_class=fast_pipeline_class,
         image_generation_pipeline_class=image_pipeline_class,
         ic_lora_pipeline_class=ic_lora_class,
-        depth_processor_pipeline_class=MidasDPTPipeline,  # pyright: ignore[reportAssignmentType]
-        pose_processor_pipeline_class=DWPosePipeline,  # pyright: ignore[reportAssignmentType]
+        depth_processor_pipeline_class=depth_class,  # pyright: ignore[reportAssignmentType]
+        pose_processor_pipeline_class=pose_class,  # pyright: ignore[reportAssignmentType]
         a2v_pipeline_class=a2v_class,
         retake_pipeline_class=retake_class,
     )

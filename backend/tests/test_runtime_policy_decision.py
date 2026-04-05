@@ -5,9 +5,17 @@ from __future__ import annotations
 from runtime_config.runtime_policy import decide_force_api_generations
 
 
-def test_darwin_always_forces_api() -> None:
-    assert decide_force_api_generations(system="Darwin", cuda_available=True, vram_gb=24) is True
-    assert decide_force_api_generations(system="Darwin", cuda_available=False, vram_gb=None) is True
+def test_darwin_forces_api_below_16gb() -> None:
+    assert decide_force_api_generations("Darwin", False, None, total_ram_gb=15.9) is True
+    assert decide_force_api_generations("Darwin", False, None, total_ram_gb=8.0) is True
+
+
+def test_darwin_allows_local_at_16gb() -> None:
+    assert decide_force_api_generations("Darwin", False, None, total_ram_gb=16.0) is False
+
+
+def test_darwin_allows_local_at_64gb() -> None:
+    assert decide_force_api_generations("Darwin", False, None, total_ram_gb=64.0) is False
 
 
 def test_windows_without_cuda_forces_api() -> None:
