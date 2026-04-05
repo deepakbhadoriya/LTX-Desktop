@@ -206,14 +206,25 @@ class RetakeHandler(StateHandlerBase):
 
     @staticmethod
     def _validate_video_metadata(video_path: str) -> None:
-        from ltx_core.types import SpatioTemporalScaleFactors
-        from ltx_pipelines.utils.media_io import get_videostream_metadata
+        try:
+            from ltx_core.types import SpatioTemporalScaleFactors
+            from ltx_pipelines.utils.media_io import get_videostream_metadata
 
-        meta = get_videostream_metadata(video_path)
-        num_frames, width, height = meta.frames, meta.width, meta.height
-        scale = SpatioTemporalScaleFactors.default()
-        if (num_frames - 1) % scale.time != 0:
-            snapped = ((num_frames - 1) // scale.time) * scale.time + 1
+            meta = get_videostream_metadata(video_path)
+            num_frames, width, height = meta.frames, meta.width, meta.height
+            scale = SpatioTemporalScaleFactors.default()
+            time_divisor = scale.time
+        except ImportError:
+            import cv2  # type: ignore[import-untyped]
+            cap = cv2.VideoCapture(video_path)
+            num_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+            height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            cap.release()
+            time_divisor = 8  # default scale.time value
+
+        if (num_frames - 1) % time_divisor != 0:
+            snapped = ((num_frames - 1) // time_divisor) * time_divisor + 1
             raise HTTPError(
                 400,
                 f"Video frame count must satisfy 8k+1 (e.g. 97, 193). Got {num_frames}; use a video with {snapped} frames.",
