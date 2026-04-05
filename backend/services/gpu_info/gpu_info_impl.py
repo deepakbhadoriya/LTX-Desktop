@@ -21,7 +21,16 @@ class _CudaDeviceProperties(Protocol):
 
 
 class GpuInfoImpl:
-    """Wraps CUDA and MPS runtime queries."""
+    """Wraps CUDA, MPS, and MLX runtime queries."""
+
+    def _get_mlx_available(self) -> bool:
+        if platform.system() != "Darwin":
+            return False
+        try:
+            import mlx.core  # type: ignore[import-untyped]
+            return True
+        except ImportError:
+            return False
 
     def _get_macos_chip_name(self) -> str | None:
         if platform.system() != "Darwin":
@@ -76,6 +85,15 @@ class GpuInfoImpl:
                     "vramUsed": 0,
                 }
 
+        if self._get_mlx_available():
+            chip = self._get_macos_chip_name()
+            name = f"{chip} (MLX)" if chip else "Apple Silicon (MLX)"
+            return {
+                "name": name,
+                "vram": self._get_system_ram_mb(),
+                "vramUsed": 0,
+            }
+
         if self.get_mps_available():
             chip = self._get_macos_chip_name()
             name = f"{chip} (MPS)" if chip else "Apple Silicon (MPS)"
@@ -102,7 +120,7 @@ class GpuInfoImpl:
             return False
 
     def get_gpu_available(self) -> bool:
-        return self.get_cuda_available() or self.get_mps_available()
+        return self.get_cuda_available() or self.get_mps_available() or self._get_mlx_available()
 
     def get_device_name(self) -> str | None:
         if self.get_cuda_available():
@@ -111,6 +129,10 @@ class GpuInfoImpl:
             except Exception:
                 logger.warning("Failed to query CUDA device name", exc_info=True)
                 return None
+
+        if self._get_mlx_available():
+            chip = self._get_macos_chip_name()
+            return f"{chip} (MLX)" if chip else "Apple Silicon (MLX)"
 
         if self.get_mps_available():
             chip = self._get_macos_chip_name()
@@ -130,13 +152,13 @@ class GpuInfoImpl:
                 logger.warning("Failed to query CUDA total VRAM", exc_info=True)
                 return None
 
-        if self.get_mps_available():
+        if self._get_mlx_available() or self.get_mps_available():
             try:
                 if sys.platform == "win32":
                     return None
                 return int((os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES")) // (1024**3))
             except Exception:
-                logger.warning("Failed to query MPS total memory", exc_info=True)
+                logger.warning("Failed to query unified memory total", exc_info=True)
                 return None
 
         return None

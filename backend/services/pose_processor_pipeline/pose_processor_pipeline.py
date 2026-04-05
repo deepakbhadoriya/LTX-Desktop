@@ -2,12 +2,9 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Protocol
+from typing import Protocol
 
 from services.services_utils import FrameArray
-
-if TYPE_CHECKING:
-    import torch
 
 
 class PoseProcessorPipeline(Protocol):
@@ -15,7 +12,7 @@ class PoseProcessorPipeline(Protocol):
     def create(
         pose_model_path: str,
         person_detector_model_path: str,
-        device: torch.device,
+        device: object,
     ) -> "PoseProcessorPipeline":
         ...
 
