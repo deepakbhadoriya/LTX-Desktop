@@ -69,13 +69,13 @@ class MLXVideoPipeline:
         """Run inference via mlx_video generate_video() and write output."""
         from mlx_video.models.ltx_2.generate import generate_video, PipelineType  # type: ignore[import-untyped]
 
-        image_path: str | None = None
-        image_strength: float = 0.8
-        image_frame_idx: int = 0
+        image_arg: str | None = None
+        image_strength_arg: float = 1.0
+        image_frame_idx_arg: int = 0
         if images:
-            image_path = images[0].path
-            image_strength = images[0].strength
-            image_frame_idx = images[0].frame_idx
+            image_arg = images[0].path
+            image_strength_arg = images[0].strength
+            image_frame_idx_arg = images[0].frame_idx
 
         generate_video(
             model_repo=self._model_repo,
@@ -88,9 +88,10 @@ class MLXVideoPipeline:
             seed=seed,
             fps=int(frame_rate),
             output_path=output_path,
-            image_path=image_path,
-            image_strength=image_strength,
-            image_frame_index=image_frame_idx,
+            spatial_upscaler=self._upsampler_path,
+            image=image_arg,
+            image_strength=image_strength_arg,
+            image_frame_idx=image_frame_idx_arg,
         )
 
     def generate(

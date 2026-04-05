@@ -207,15 +207,11 @@ def _resolve_force_api_generations() -> bool:
 
 FORCE_API_GENERATIONS = _resolve_force_api_generations()
 
-if _IS_DARWIN:
-    _MODEL_DOWNLOAD_SPECS = MLX_MODEL_DOWNLOAD_SPECS
-    _BASE_REQUIRED = MLX_REQUIRED_MODEL_TYPES
-else:
-    _MODEL_DOWNLOAD_SPECS = DEFAULT_MODEL_DOWNLOAD_SPECS
-    _BASE_REQUIRED = DEFAULT_REQUIRED_MODEL_TYPES
+model_download_specs = MLX_MODEL_DOWNLOAD_SPECS if _IS_DARWIN else DEFAULT_MODEL_DOWNLOAD_SPECS
+base_required = MLX_REQUIRED_MODEL_TYPES if _IS_DARWIN else DEFAULT_REQUIRED_MODEL_TYPES
 
 REQUIRED_MODEL_TYPES: frozenset[ModelFileType] = (
-    frozenset() if FORCE_API_GENERATIONS else _BASE_REQUIRED
+    frozenset() if FORCE_API_GENERATIONS else base_required
 )
 
 CAMERA_MOTION_PROMPTS = {
@@ -235,7 +231,7 @@ DEFAULT_NEGATIVE_PROMPT = """blurry, out of focus, overexposed, underexposed, lo
 runtime_config = RuntimeConfig(
     device=DEVICE,
     default_models_dir=DEFAULT_MODELS_DIR,
-    model_download_specs=_MODEL_DOWNLOAD_SPECS,
+    model_download_specs=model_download_specs,
     required_model_types=REQUIRED_MODEL_TYPES,
     outputs_dir=OUTPUTS_DIR,
     settings_file=SETTINGS_FILE,

@@ -72,11 +72,11 @@ class MLXa2vPipeline:
             prompt[:50], seed, width, height, num_frames,
         )
 
-        image_path: str | None = None
-        image_strength: float = 0.8
+        image_arg: str | None = None
+        image_strength_arg: float = 1.0
         if images:
-            image_path = images[0].path
-            image_strength = images[0].strength
+            image_arg = images[0].path
+            image_strength_arg = images[0].strength
 
         generate_video(
             model_repo=self._model_repo,
@@ -91,11 +91,12 @@ class MLXa2vPipeline:
             seed=seed,
             fps=int(frame_rate),
             output_path=output_path,
-            image_path=image_path,
-            image_strength=image_strength,
-            audio_path=audio_path,
+            spatial_upscaler=self._upsampler_path,
+            image=image_arg,
+            image_strength=image_strength_arg,
+            audio_file=audio_path,
             audio_start_time=audio_start_time,
-            audio_max_duration=audio_max_duration,
+            audio=True,
         )
 
         gc.collect()

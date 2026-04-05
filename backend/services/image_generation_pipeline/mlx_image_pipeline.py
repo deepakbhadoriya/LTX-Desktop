@@ -6,10 +6,17 @@ import gc
 import logging
 from collections.abc import Sequence
 from dataclasses import dataclass
+from typing import Protocol, cast
 
 from services.services_utils import ImagePipelineOutputLike, PILImageType
 
 logger = logging.getLogger(__name__)
+
+
+class _MfluxPipelineLike(Protocol):
+    def generate_image(
+        self, *, prompt: str, seed: int, num_inference_steps: int, width: int, height: int,
+    ) -> PILImageType: ...
 
 
 @dataclass(slots=True)
@@ -33,9 +40,9 @@ class MLXImageGenerationPipeline:
 
     def __init__(self, model_path: str) -> None:
         self._model_path = model_path
-        self._pipeline: object | None = None
+        self._pipeline: _MfluxPipelineLike | None = None
 
-    def _ensure_pipeline(self) -> object:
+    def _get_pipeline(self) -> _MfluxPipelineLike:
         """Lazily load the mflux Z-Image-Turbo pipeline on first use."""
         if self._pipeline is not None:
             return self._pipeline
@@ -44,10 +51,11 @@ class MLXImageGenerationPipeline:
 
         from mflux.models.z_image import ZImageTurbo  # type: ignore[import-untyped]
 
-        self._pipeline = ZImageTurbo(model_path=self._model_path)
+        pipeline = cast(_MfluxPipelineLike, ZImageTurbo(model_path=self._model_path))
+        self._pipeline = pipeline
 
         logger.info("mflux Z-Image-Turbo loaded successfully")
-        return self._pipeline
+        return pipeline
 
     def generate(
         self,
@@ -63,9 +71,9 @@ class MLXImageGenerationPipeline:
 
         logger.info("MLX image generate: prompt=%r %dx%d seed=%d", prompt[:50], width, height, seed)
 
-        pipeline = self._ensure_pipeline()
+        pipeline = self._get_pipeline()
 
-        image = pipeline.generate_image(  # type: ignore[union-attr]
+        image = pipeline.generate_image(
             prompt=prompt,
             seed=seed,
             num_inference_steps=num_inference_steps,

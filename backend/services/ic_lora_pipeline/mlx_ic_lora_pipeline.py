@@ -72,11 +72,11 @@ class MLXIcLoraPipeline:
             prompt[:50], seed, width, height, num_frames,
         )
 
-        image_path: str | None = None
-        image_strength: float = 0.8
+        image_arg: str | None = None
+        image_strength_arg: float = 1.0
         if images:
-            image_path = images[0].path
-            image_strength = images[0].strength
+            image_arg = images[0].path
+            image_strength_arg = images[0].strength
 
         generate_video(
             model_repo=self._model_repo,
@@ -89,8 +89,9 @@ class MLXIcLoraPipeline:
             seed=seed,
             fps=int(frame_rate),
             output_path=output_path,
-            image_path=image_path,
-            image_strength=image_strength,
+            spatial_upscaler=self._upsampler_path,
+            image=image_arg,
+            image_strength=image_strength_arg,
             lora_path=self._lora_path,
             lora_strength=1.0,
         )

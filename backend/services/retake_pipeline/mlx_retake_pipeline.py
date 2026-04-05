@@ -73,6 +73,13 @@ class MLXRetakePipeline:
 
         del video_guider_params, audio_guider_params, enhance_prompt
 
+        # mlx_video does not yet support partial retake natively.
+        # Generate a full replacement clip matching the retake region duration.
+        duration_secs = end_time - start_time
+        num_frames = max(9, int(duration_secs * 24))
+        # Snap to 8k+1 (required by LTX VAE)
+        num_frames = ((num_frames - 1) // 8) * 8 + 1
+
         generate_video(
             model_repo=self._model_repo,
             text_encoder_repo=self._text_encoder_repo,
@@ -80,14 +87,10 @@ class MLXRetakePipeline:
             negative_prompt=negative_prompt,
             pipeline=PipelineType.DISTILLED if distilled else PipelineType.DEV,
             num_inference_steps=num_inference_steps,
+            num_frames=num_frames,
             seed=seed,
+            fps=24,
             output_path=output_path,
-            # Retake-specific: source video with temporal region
-            retake_video_path=video_path,
-            retake_start_time=start_time,
-            retake_end_time=end_time,
-            regenerate_video=regenerate_video,
-            regenerate_audio=regenerate_audio,
         )
 
         gc.collect()
