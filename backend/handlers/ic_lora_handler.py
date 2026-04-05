@@ -73,6 +73,10 @@ class IcLoraHandler(StateHandlerBase):
                 raise HTTPError(400, f"Unsupported conditioning_type: {conditioning_type}")
 
     def _require_ic_lora_model_paths(self) -> tuple[Path, Path]:
+        if "ic_lora" not in self.config.model_download_specs:
+            raise HTTPError(400, "IC-LoRA is not available on this platform")
+        if "depth_processor" not in self.config.model_download_specs:
+            raise HTTPError(400, "Depth processor is not available on this platform")
         lora_path = resolve_model_path(self.models_dir, self.config.model_download_specs,"ic_lora")
         depth_model_path = resolve_model_path(self.models_dir, self.config.model_download_specs,"depth_processor")
         if not lora_path.exists():

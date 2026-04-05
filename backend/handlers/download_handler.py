@@ -221,6 +221,8 @@ class DownloadHandler(StateHandlerBase):
         for model_type in MODEL_FILE_ORDER:
             if model_type not in model_types:
                 continue
+            if model_type not in self.config.model_download_specs:
+                continue
             if available[model_type] is not None:
                 continue
             spec = self.config.spec_for(model_type)
