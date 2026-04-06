@@ -145,13 +145,6 @@ MLX_MODEL_DOWNLOAD_SPECS: dict[ModelFileType, ModelFileDownloadSpec] = {
         repo_id="Lightricks/LTX-2.3-22b-IC-LoRA-Union-Control",
         description="Union IC-LoRA control model",
     ),
-    "depth_processor": ModelFileDownloadSpec(
-        relative_path=Path("dpt-hybrid-midas"),
-        expected_size_bytes=500_000_000,
-        is_folder=True,
-        repo_id="Intel/dpt-hybrid-midas",
-        description="DPT-Hybrid MiDaS depth processor",
-    ),
 }
 
 MLX_REQUIRED_MODEL_TYPES: frozenset[ModelFileType] = frozenset(

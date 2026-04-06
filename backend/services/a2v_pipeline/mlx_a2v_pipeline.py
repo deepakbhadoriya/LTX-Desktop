@@ -14,7 +14,7 @@ _DEFAULT_MODEL_REPO = "Lightricks/LTX-Video-2.3-distilled"
 _DEFAULT_TEXT_ENCODER_REPO = "Lightricks/gemma-3-12b-it-qat-q4_0-unquantized"
 
 
-class MLXa2vPipeline:
+class MLXA2VPipeline:
     """Audio-to-video generation pipeline using mlx_video on Apple Silicon.
 
     Uses generate_video() with audio_path parameter for A2V generation.
@@ -26,9 +26,9 @@ class MLXa2vPipeline:
         gemma_root: str | None,
         upsampler_path: str,
         device: object,
-    ) -> "MLXa2vPipeline":
+    ) -> "MLXA2VPipeline":
         del device
-        return MLXa2vPipeline(
+        return MLXA2VPipeline(
             checkpoint_path=checkpoint_path,
             gemma_root=gemma_root,
             upsampler_path=upsampler_path,

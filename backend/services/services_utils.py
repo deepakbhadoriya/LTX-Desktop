@@ -6,15 +6,20 @@ import logging
 from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING, BinaryIO, Protocol, TypeAlias
 
-import torch
 from PIL.Image import Image as PILImage
 
 if TYPE_CHECKING:
     import numpy as np
+    import torch
     from numpy.typing import NDArray
 
     from ltx_core.model.video_vae import TilingConfig
 
+    TensorType: TypeAlias = torch.Tensor
+    TensorOrNone: TypeAlias = torch.Tensor | None
+else:
+    TensorType: TypeAlias = object
+    TensorOrNone: TypeAlias = object
 
 JSONScalar: TypeAlias = str | int | float | bool | None
 JSONValue: TypeAlias = JSONScalar | list["JSONValue"] | dict[str, "JSONValue"]
@@ -22,7 +27,6 @@ RequestFieldValue: TypeAlias = str | bytes | int | float | bool | None
 RequestData: TypeAlias = bytes | str | Mapping[str, RequestFieldValue] | BinaryIO | None
 PromptInput: TypeAlias = str | Sequence[str]
 
-TensorType: TypeAlias = torch.Tensor
 PILImageType: TypeAlias = PILImage
 
 if TYPE_CHECKING:
@@ -35,13 +39,12 @@ else:
     TilingConfigType: TypeAlias = object
     AudioType: TypeAlias = object
 
-TensorOrNone: TypeAlias = TensorType | None
 AudioOrNone: TypeAlias = AudioType | None
 
 logger = logging.getLogger(__name__)
 
 
-def get_device_type(device: str | torch.device | object | None) -> str:
+def get_device_type(device: str | object | None) -> str:
     if device is None:
         return "cpu"
 
@@ -54,6 +57,7 @@ def get_device_type(device: str | torch.device | object | None) -> str:
 
     if isinstance(device, str):
         try:
+            import torch
             return str(torch.device(device).type)
         except Exception:
             logger.warning("Could not parse device string '%s', using it as-is", device, exc_info=True)
@@ -62,38 +66,44 @@ def get_device_type(device: str | torch.device | object | None) -> str:
     return "cpu"
 
 
-def device_supports_fp8(device: str | torch.device | object | None) -> bool:
+def device_supports_fp8(device: str | object | None) -> bool:
     return get_device_type(device) == "cuda"
 
 
-def sync_device(device: str | torch.device | object | None) -> None:
+def sync_device(device: str | object | None) -> None:
     device_type = get_device_type(device)
     if device_type == "cuda":
         try:
+            import torch
             torch.cuda.synchronize()
         except Exception:
             logger.warning("torch.cuda.synchronize() failed", exc_info=True)
         return
 
-    if device_type == "mps" and hasattr(torch, "mps"):
+    if device_type == "mps":
         try:
-            torch.mps.synchronize()
+            import torch
+            if hasattr(torch, "mps"):
+                torch.mps.synchronize()
         except Exception:
             logger.warning("torch.mps.synchronize() failed", exc_info=True)
 
 
-def empty_device_cache(device: str | torch.device | object | None) -> None:
+def empty_device_cache(device: str | object | None) -> None:
     device_type = get_device_type(device)
     if device_type == "cuda":
         try:
+            import torch
             torch.cuda.empty_cache()
         except Exception:
             logger.warning("torch.cuda.empty_cache() failed", exc_info=True)
         return
 
-    if device_type == "mps" and hasattr(torch, "mps"):
+    if device_type == "mps":
         try:
-            torch.mps.empty_cache()
+            import torch
+            if hasattr(torch, "mps"):
+                torch.mps.empty_cache()
         except Exception:
             logger.warning("torch.mps.empty_cache() failed", exc_info=True)
         return
@@ -104,7 +114,7 @@ def empty_device_cache(device: str | torch.device | object | None) -> None:
 
 
 class LatentStateLike(Protocol):
-    latent: torch.Tensor
+    latent: TensorType
 
 
 class VideoCaptureLike(Protocol):

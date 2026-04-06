@@ -257,22 +257,22 @@ def build_default_service_bundle(config: RuntimeConfig) -> ServiceBundle:
         from services.fast_video_pipeline.mlx_video_pipeline import MLXVideoPipeline
         from services.gpu_cleaner.mlx_cleaner import MLXCleaner
         from services.text_encoder.mlx_text_encoder import MLXTextEncoder
-        from services.a2v_pipeline.mlx_a2v_pipeline import MLXa2vPipeline
+        from services.a2v_pipeline.mlx_a2v_pipeline import MLXA2VPipeline
         from services.retake_pipeline.mlx_retake_pipeline import MLXRetakePipeline
         from services.ic_lora_pipeline.mlx_ic_lora_pipeline import MLXIcLoraPipeline
         from services.image_generation_pipeline.mlx_image_pipeline import MLXImageGenerationPipeline
         from services.depth_processor_pipeline.mlx_depth_pipeline import MLXDepthPipeline
-        from services.pose_processor_pipeline.noop_pose_pipeline import NoopPosePipeline
+        from services.pose_processor_pipeline.mlx_pose_pipeline import MLXPosePipeline
 
         fast_pipeline_class: type[FastVideoPipeline] = MLXVideoPipeline  # pyright: ignore[reportAssignmentType]
         gpu_cleaner_instance: GpuCleaner = MLXCleaner()
         text_encoder_instance: TextEncoder = MLXTextEncoder()
         image_pipeline_class: type[ImageGenerationPipeline] = MLXImageGenerationPipeline  # pyright: ignore[reportAssignmentType]
-        a2v_class: type[A2VPipeline] = MLXa2vPipeline  # pyright: ignore[reportAssignmentType]
+        a2v_class: type[A2VPipeline] = MLXA2VPipeline  # pyright: ignore[reportAssignmentType]
         retake_class: type[RetakePipeline] = MLXRetakePipeline  # pyright: ignore[reportAssignmentType]
         ic_lora_class: type[IcLoraPipeline] = MLXIcLoraPipeline  # pyright: ignore[reportAssignmentType]
         depth_class: type[DepthProcessorPipeline] = MLXDepthPipeline  # pyright: ignore[reportAssignmentType]
-        pose_class: type[PoseProcessorPipeline] = NoopPosePipeline  # pyright: ignore[reportAssignmentType]
+        pose_class: type[PoseProcessorPipeline] = MLXPosePipeline  # pyright: ignore[reportAssignmentType]
     else:
         from services.fast_video_pipeline.ltx_fast_video_pipeline import LTXFastVideoPipeline
         from services.gpu_cleaner.torch_cleaner import TorchCleaner

@@ -25,6 +25,7 @@ class MLXDepthPipeline:
         return MLXDepthPipeline()
 
     def apply(self, frame: FrameArray) -> FrameArray:
+        """Compute Sobel-based depth map and return INFERNO-colorized result."""
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
         sobel_x = cv2.Sobel(gray, cv2.CV_64F, 1, 0, ksize=3)
