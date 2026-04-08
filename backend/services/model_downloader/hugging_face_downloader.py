@@ -97,8 +97,13 @@ class HuggingFaceDownloader:
         repo_id: str,
         local_dir: str,
         on_progress: Callable[[int], None] | None = None,
+        ignore_patterns: list[str] | None = None,
     ) -> Path:
         ctx = _patch_download_progress(on_progress) if on_progress is not None else contextlib.nullcontext()
         with ctx:
-            path: str = snapshot_download(repo_id=repo_id, local_dir=local_dir)
+            path: str = snapshot_download(
+                repo_id=repo_id,
+                local_dir=local_dir,
+                ignore_patterns=ignore_patterns,
+            )
         return Path(path)

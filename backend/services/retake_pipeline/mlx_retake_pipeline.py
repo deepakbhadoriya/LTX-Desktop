@@ -8,8 +8,8 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-_DEFAULT_MODEL_REPO = "Lightricks/LTX-Video-2.3-distilled"
-_DEFAULT_TEXT_ENCODER_REPO = "Lightricks/gemma-3-12b-it-qat-q4_0-unquantized"
+_DEFAULT_MODEL_REPO = "dgrauet/ltx-2.3-mlx"
+_DEFAULT_TEXT_ENCODER_REPO = "mlx-community/gemma-3-12b-it-4bit"
 
 
 class MLXRetakePipeline:
@@ -41,8 +41,13 @@ class MLXRetakePipeline:
         self._checkpoint_path = checkpoint_path
         self._gemma_root = gemma_root
 
-        checkpoint_dir = Path(checkpoint_path).parent
-        self._model_repo = str(checkpoint_dir) if checkpoint_dir.exists() else _DEFAULT_MODEL_REPO
+        checkpoint_p = Path(checkpoint_path)
+        if checkpoint_p.is_dir():
+            self._model_repo = str(checkpoint_p)
+        elif checkpoint_p.parent.exists():
+            self._model_repo = str(checkpoint_p.parent)
+        else:
+            self._model_repo = _DEFAULT_MODEL_REPO
         self._text_encoder_repo = str(gemma_root) if gemma_root and Path(gemma_root).exists() else _DEFAULT_TEXT_ENCODER_REPO
 
     def generate(

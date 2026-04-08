@@ -325,6 +325,7 @@ class FakeModelDownloader:
         repo_id: str,
         local_dir: str,
         on_progress: Callable[[int], None] | None = None,
+        ignore_patterns: list[str] | None = None,
     ) -> Path:
         self._raise_if_needed()
         self.calls.append(

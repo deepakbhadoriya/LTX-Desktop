@@ -17,6 +17,7 @@ class ModelFileDownloadSpec:
     is_folder: bool
     repo_id: str
     description: str
+    ignore_patterns: tuple[str, ...] | None = None
 
     @property
     def name(self) -> str:
@@ -111,18 +112,19 @@ DEFAULT_REQUIRED_MODEL_TYPES: frozenset[ModelFileType] = frozenset(
 # These replace the CUDA models when running on Mac with MLX inference.
 MLX_MODEL_DOWNLOAD_SPECS: dict[ModelFileType, ModelFileDownloadSpec] = {
     "checkpoint": ModelFileDownloadSpec(
-        relative_path=Path("mlx-ltx-2.3-distilled-q4"),
-        expected_size_bytes=19_000_000_000,
+        relative_path=Path("mlx-ltx-2.3"),
+        expected_size_bytes=56_000_000_000,
         is_folder=True,
-        repo_id="mlx-community/LTX-Video-2.3-distilled-Q4-mlx",
-        description="LTX 2.3 Distilled Q4 (MLX) — fast preview",
+        repo_id="dgrauet/ltx-2.3-mlx",
+        description="LTX 2.3 Distilled (MLX bf16)",
+        ignore_patterns=("transformer-dev.safetensors",),
     ),
     "upsampler": ModelFileDownloadSpec(
-        relative_path=Path("mlx-ltx-2.3-spatial-upscaler-x2"),
-        expected_size_bytes=1_900_000_000,
-        is_folder=True,
-        repo_id="mlx-community/LTX-Video-2.3-upscaler-mlx",
-        description="2x Upscaler (MLX)",
+        relative_path=Path("spatial_upscaler_x2_v1_1.safetensors"),
+        expected_size_bytes=996_000_000,
+        is_folder=False,
+        repo_id="dgrauet/ltx-2.3-mlx",
+        description="2x Spatial Upscaler (MLX)",
     ),
     "text_encoder": ModelFileDownloadSpec(
         relative_path=Path("mlx-gemma-3-12b-it-q4"),
@@ -132,11 +134,11 @@ MLX_MODEL_DOWNLOAD_SPECS: dict[ModelFileType, ModelFileDownloadSpec] = {
         description="Gemma text encoder (MLX 4-bit)",
     ),
     "zit": ModelFileDownloadSpec(
-        relative_path=Path("mlx-flux-schnell"),
-        expected_size_bytes=8_000_000_000,
+        relative_path=Path("Z-Image-Turbo"),
+        expected_size_bytes=31_000_000_000,
         is_folder=True,
-        repo_id="mlx-community/FLUX.1-schnell-mlx",
-        description="Flux Schnell (MLX) for text-to-image generation",
+        repo_id="Tongyi-MAI/Z-Image-Turbo",
+        description="Z-Image-Turbo model for text-to-image (mflux)",
     ),
     "ic_lora": ModelFileDownloadSpec(
         relative_path=Path("ltx-2.3-22b-ic-lora-union-control-ref0.5.safetensors"),

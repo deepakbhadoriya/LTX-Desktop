@@ -249,6 +249,7 @@ class DownloadHandler(StateHandlerBase):
                         repo_id=spec.repo_id,
                         local_dir=str(resolve_downloading_path(self.models_dir, self.config.model_download_specs, file_type)),
                         on_progress=progress_cb,
+                        ignore_patterns=list(spec.ignore_patterns) if spec.ignore_patterns else None,
                     )
                 else:
                     self._model_downloader.download_file(

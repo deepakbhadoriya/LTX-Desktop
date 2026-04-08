@@ -13,8 +13,8 @@ from api_types import ImageConditioningInput
 logger = logging.getLogger(__name__)
 
 # Default HF repo IDs for mlx_video — overridden if local paths exist.
-_DEFAULT_MODEL_REPO = "Lightricks/LTX-Video-2.3-distilled"
-_DEFAULT_TEXT_ENCODER_REPO = "Lightricks/gemma-3-12b-it-qat-q4_0-unquantized"
+_DEFAULT_MODEL_REPO = "dgrauet/ltx-2.3-mlx"
+_DEFAULT_TEXT_ENCODER_REPO = "mlx-community/gemma-3-12b-it-4bit"
 
 
 class MLXVideoPipeline:
@@ -50,9 +50,15 @@ class MLXVideoPipeline:
         self._gemma_root = gemma_root
         self._upsampler_path = upsampler_path
 
-        # Resolve model repo: use parent dir as HF repo if local, else default.
-        checkpoint_dir = Path(checkpoint_path).parent
-        self._model_repo = str(checkpoint_dir) if checkpoint_dir.exists() else _DEFAULT_MODEL_REPO
+        # Resolve model repo: use checkpoint path directly if it's a directory
+        # (folder download), otherwise use its parent (single-file download).
+        checkpoint_p = Path(checkpoint_path)
+        if checkpoint_p.is_dir():
+            self._model_repo = str(checkpoint_p)
+        elif checkpoint_p.parent.exists():
+            self._model_repo = str(checkpoint_p.parent)
+        else:
+            self._model_repo = _DEFAULT_MODEL_REPO
         self._text_encoder_repo = str(gemma_root) if gemma_root and Path(gemma_root).exists() else _DEFAULT_TEXT_ENCODER_REPO
 
     def _run_inference(
