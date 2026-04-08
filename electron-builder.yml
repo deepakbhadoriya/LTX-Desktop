@@ -58,6 +58,7 @@ nsis:
   shortcutName: LTX Desktop
 
 mac:
+  identity: null
   hardenedRuntime: true
   entitlements: resources/entitlements.mac.plist
   entitlementsInherit: resources/entitlements.mac.plist
