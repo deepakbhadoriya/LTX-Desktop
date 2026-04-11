@@ -152,6 +152,10 @@ export class ApiClient {
     return this.requestJson('/api/models/download/clear-partials', 'post')
   }
 
+  static pauseModelDownload(): Promise<{ status: string }> {
+    return this.requestJson('/api/models/download/pause' as any, 'post')
+  }
+
   static startTextEncoderDownload(): Promise<JsonResponseFor<'/api/text-encoder/download', 'post'>> {
     return this.requestJson('/api/text-encoder/download', 'post')
   }
