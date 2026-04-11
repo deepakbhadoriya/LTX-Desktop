@@ -429,6 +429,44 @@ class TestAtomicDownloads:
         assert file_calls[0]["initial_bytes"] == 3072
 
 
+class TestPauseDownload:
+    def test_pause_returns_409_when_no_download(self, client):
+        resp = client.post("/api/models/download/pause")
+        assert resp.status_code == 409
+
+    def test_pause_returns_200_when_download_running(self, client, test_state):
+        test_state.downloads.start_download({"checkpoint"})
+        resp = client.post("/api/models/download/pause")
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "pausing"
+
+    def test_paused_download_reports_paused_status(self, client, test_state):
+        session_id = test_state.downloads.start_download({"checkpoint"})
+        test_state.downloads.pause_download()
+
+        resp = client.get(f"/api/models/download/progress?sessionId={session_id}")
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "paused"
+
+    def test_pause_event_interrupts_progress_callback(self, test_state):
+        import pytest
+        from handlers.download_handler import DownloadPausedError
+
+        test_state.downloads.start_download({"checkpoint"})
+        test_state.downloads.start_file("checkpoint", "test-model", initial_bytes=0)
+        cb = test_state.downloads._make_progress_callback("checkpoint")
+
+        # Before pause: callback works
+        cb(1024)
+
+        # Set pause event
+        test_state.downloads.request_pause()
+
+        # After pause: callback raises
+        with pytest.raises(DownloadPausedError):
+            cb(2048)
+
+
 class TestHuggingFaceInternals:
     """Guard tests for huggingface_hub internals we rely on.
 
