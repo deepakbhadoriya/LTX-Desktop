@@ -1,4 +1,4 @@
-"""MLX image generation pipeline using mflux (Z-Image-Turbo) on Apple Silicon."""
+"""MLX image generation pipeline using mflux (Flux.2 Klein 4B) on Apple Silicon."""
 
 from __future__ import annotations
 
@@ -6,17 +6,11 @@ import gc
 import logging
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Protocol, cast
+from typing import Any
 
 from services.services_utils import ImagePipelineOutputLike, PILImageType
 
 logger = logging.getLogger(__name__)
-
-
-class _MfluxPipelineLike(Protocol):
-    def generate_image(
-        self, *, prompt: str, seed: int, num_inference_steps: int, width: int, height: int,
-    ) -> PILImageType: ...
 
 
 @dataclass(slots=True)
@@ -25,9 +19,11 @@ class _MfluxOutput:
 
 
 class MLXImageGenerationPipeline:
-    """Image generation pipeline using mflux Z-Image-Turbo on Apple Silicon.
+    """Image generation pipeline using mflux Flux.2 Klein 4B on Apple Silicon.
 
     Replaces ZitImageGenerationPipeline which uses CUDA-based diffusers.
+    Uses Flux.2 Klein 4B (4-bit quantized) for fast, memory-efficient
+    image generation on Apple Silicon.
     """
 
     @staticmethod
@@ -40,21 +36,21 @@ class MLXImageGenerationPipeline:
 
     def __init__(self, model_path: str) -> None:
         self._model_path = model_path
-        self._pipeline: _MfluxPipelineLike | None = None
+        self._pipeline: Any | None = None
 
-    def _get_pipeline(self) -> _MfluxPipelineLike:
-        """Lazily load the mflux Z-Image-Turbo pipeline on first use."""
+    def _get_pipeline(self) -> Any:
+        """Lazily load the mflux Flux.2 Klein pipeline on first use."""
         if self._pipeline is not None:
             return self._pipeline
 
-        logger.info("Loading mflux Z-Image-Turbo from: %s", self._model_path)
+        logger.info("Loading mflux Flux.2 Klein 4B from: %s", self._model_path)
 
-        from mflux.models.z_image import ZImageTurbo  # type: ignore[import-untyped]
+        from mflux.models.flux2 import Flux2Klein  # type: ignore[import-untyped]
 
-        pipeline = cast(_MfluxPipelineLike, ZImageTurbo(model_path=self._model_path))
+        pipeline = Flux2Klein(model_path=self._model_path)
         self._pipeline = pipeline
 
-        logger.info("mflux Z-Image-Turbo loaded successfully")
+        logger.info("mflux Flux.2 Klein 4B loaded successfully")
         return pipeline
 
     def generate(
@@ -67,23 +63,24 @@ class MLXImageGenerationPipeline:
         seed: int,
     ) -> ImagePipelineOutputLike:
         """Generate an image from a text prompt via mflux."""
-        _ = guidance_scale  # Z-Image-Turbo ignores guidance_scale
-
         logger.info("MLX image generate: prompt=%r %dx%d seed=%d", prompt[:50], width, height, seed)
 
         pipeline = self._get_pipeline()
 
-        image = pipeline.generate_image(
+        # Flux2Klein.generate_image returns a GeneratedImage wrapper;
+        # extract the PIL image via .image attribute.
+        result = pipeline.generate_image(
             prompt=prompt,
             seed=seed,
             num_inference_steps=num_inference_steps,
             width=width,
             height=height,
+            guidance=guidance_scale,
         )
 
         gc.collect()
         logger.info("MLX image generation complete")
-        return _MfluxOutput(images=[image])
+        return _MfluxOutput(images=[result.image])
 
     def to(self, device: str) -> None:
         """No-op — MLX manages device placement automatically."""

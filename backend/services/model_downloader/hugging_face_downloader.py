@@ -3,14 +3,28 @@
 from __future__ import annotations
 
 import contextlib
+import os
 from collections.abc import Callable, Iterator
 from pathlib import Path
 from threading import Lock
 from typing import Any
 from unittest.mock import patch
 
-from huggingface_hub import file_download, hf_hub_download, snapshot_download  # type: ignore[reportUnknownVariableType]
-from tqdm.auto import tqdm as tqdm_auto  # type: ignore[reportUnknownVariableType]
+# Enable huggingface_hub's high-throughput xet transfer mode before the
+# library is imported (its constants.py reads this env var at module load).
+# xet-backed files (which large Lightricks model shards use) will transfer
+# via parallel chunked downloads for much higher throughput on fast links.
+os.environ.setdefault("HF_XET_HIGH_PERFORMANCE", "1")
+
+from huggingface_hub import file_download, hf_hub_download, snapshot_download  # noqa: E402  # type: ignore[reportUnknownVariableType]
+from tqdm.auto import tqdm as tqdm_auto  # noqa: E402  # type: ignore[reportUnknownVariableType]
+
+# Number of parallel file workers for snapshot (multi-file) downloads.
+# ``huggingface_hub.snapshot_download`` defaults to 8; we bump to 16 to
+# saturate fast links on modern multi-core machines. For single-file
+# downloads via ``hf_hub_download``, parallelism is handled internally by
+# xet's chunked transfer — there is no public worker knob.
+DOWNLOAD_MAX_WORKERS = 16
 
 
 def _make_progress_tqdm_class(callback: Callable[[int], None], initial_bytes: int = 0) -> type:
@@ -119,5 +133,6 @@ class HuggingFaceDownloader:
                 repo_id=repo_id,
                 local_dir=local_dir,
                 ignore_patterns=ignore_patterns,
+                max_workers=DOWNLOAD_MAX_WORKERS,
             )
         return Path(path)
