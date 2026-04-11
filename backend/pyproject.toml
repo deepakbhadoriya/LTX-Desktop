@@ -52,8 +52,8 @@ torchaudio = [
 diffusers = { git = "https://github.com/huggingface/diffusers.git", rev = "01de02e8b4f2cc91df4f3e91cb6535ebcbeb490c" }
 ltx-core = { git = "https://github.com/Lightricks/LTX-2.git", subdirectory = "packages/ltx-core", rev = "59ca828d5ae24358832ffd7003c2306fbceeba3a" }
 ltx-pipelines = { git = "https://github.com/Lightricks/LTX-2.git", subdirectory = "packages/ltx-pipelines", rev = "59ca828d5ae24358832ffd7003c2306fbceeba3a" }
-ltx-core-mlx = { git = "https://github.com/dgrauet/ltx-2-mlx.git", subdirectory = "packages/ltx-core-mlx" }
-ltx-pipelines-mlx = { git = "https://github.com/dgrauet/ltx-2-mlx.git", subdirectory = "packages/ltx-pipelines-mlx" }
+ltx-core-mlx = { git = "https://github.com/dgrauet/ltx-2-mlx.git", subdirectory = "packages/ltx-core-mlx", rev = "de4a12d3cd14f345b2ec680eb63f4114b927b435" }
+ltx-pipelines-mlx = { git = "https://github.com/dgrauet/ltx-2-mlx.git", subdirectory = "packages/ltx-pipelines-mlx", rev = "de4a12d3cd14f345b2ec680eb63f4114b927b435" }
 
 [project.optional-dependencies]
 test = ["pytest>=8.0", "requests>=2.31", "httpx>=0.27"]

@@ -101,6 +101,10 @@ class MLXIcLoraPipeline:
         self._ensure_loaded()
         assert self._pipeline is not None
 
+        images_arg: list[tuple[str, int, float]] | None = None
+        if images:
+            images_arg = [(img.path, img.frame_idx, img.strength) for img in images]
+
         self._pipeline.generate_and_save(
             prompt=prompt,
             output_path=output_path,
@@ -109,6 +113,7 @@ class MLXIcLoraPipeline:
             width=width,
             num_frames=num_frames,
             seed=seed,
+            images=images_arg,
         )
 
         gc.collect()

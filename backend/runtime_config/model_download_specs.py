@@ -127,7 +127,7 @@ MLX_MODEL_DOWNLOAD_SPECS: dict[ModelFileType, ModelFileDownloadSpec] = {
     ),
     "text_encoder": ModelFileDownloadSpec(
         relative_path=Path("mlx-gemma-3-12b-it-q4"),
-        expected_size_bytes=7_000_000_000,
+        expected_size_bytes=8_100_000_000,
         is_folder=True,
         repo_id="mlx-community/gemma-3-12b-it-4bit",
         description="Gemma text encoder (MLX 4-bit)",
