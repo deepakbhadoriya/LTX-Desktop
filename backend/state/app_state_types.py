@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import threading
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
@@ -52,7 +53,15 @@ class DownloadSessionError:
     status: str = "error"
 
 
-DownloadSessionResult = DownloadSessionComplete | DownloadSessionError
+@dataclass(frozen=True)
+class DownloadSessionPaused:
+    files_to_download: frozenset[ModelFileType]
+    completed_files: frozenset[ModelFileType]
+    completed_bytes: int
+    status: str = "paused"
+
+
+DownloadSessionResult = DownloadSessionComplete | DownloadSessionError | DownloadSessionPaused
 
 
 def _default_completed_download_sessions() -> dict[DownloadSessionId, DownloadSessionResult]:
@@ -74,6 +83,7 @@ class DownloadingSession:
     files_to_download: set[ModelFileType]
     completed_files: set[ModelFileType]
     completed_bytes: int
+    cancel_event: threading.Event = field(default_factory=threading.Event)
 
 
 # ============================================================

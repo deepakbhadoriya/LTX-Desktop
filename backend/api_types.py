@@ -151,13 +151,24 @@ class DownloadProgressErrorResponse(BaseModel):
     error: str
 
 
+class DownloadProgressPausedResponse(BaseModel):
+    status: Literal["paused"]
+
+
 DownloadProgressResponse: TypeAlias = (
-    DownloadProgressRunningResponse | DownloadProgressCompleteResponse | DownloadProgressErrorResponse
+    DownloadProgressRunningResponse
+    | DownloadProgressCompleteResponse
+    | DownloadProgressErrorResponse
+    | DownloadProgressPausedResponse
 )
 
 
 class ClearPartialDownloadsResponse(BaseModel):
     status: Literal["ok"] = "ok"
+
+
+class PauseDownloadResponse(BaseModel):
+    status: Literal["pausing"] = "pausing"
 
 
 class SuggestGapPromptResponse(BaseModel):
