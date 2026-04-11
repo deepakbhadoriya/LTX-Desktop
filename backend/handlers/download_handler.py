@@ -13,6 +13,7 @@ from uuid import uuid4
 from api_types import (
     DownloadProgressCompleteResponse,
     DownloadProgressErrorResponse,
+    DownloadProgressPausedResponse,
     DownloadProgressResponse,
     DownloadProgressRunningResponse,
 )
@@ -31,6 +32,7 @@ from state.app_state_types import (
     DownloadSessionComplete,
     DownloadSessionError,
     DownloadSessionId,
+    DownloadSessionPaused,
     DownloadingSession,
     FileDownloadRunning,
     ModelFileType,
@@ -40,6 +42,14 @@ if TYPE_CHECKING:
     from runtime_config.runtime_config import RuntimeConfig
 
 logger = logging.getLogger(__name__)
+
+
+class DownloadInProgressError(RuntimeError):
+    """Raised when an operation is rejected because a download is in progress."""
+
+
+class DownloadPausedError(Exception):
+    """Raised from progress callback when user requests pause."""
 
 
 class DownloadHandler(StateHandlerBase):
@@ -118,13 +128,45 @@ class DownloadHandler(StateHandlerBase):
             self.state.completed_download_sessions[session.id] = DownloadSessionError(error_message=error)
             self.state.downloading_session = None
 
-    def _make_progress_callback(self, file_type: ModelFileType) -> Callable[[int], None]:
+    @with_state_lock
+    def request_pause(self) -> bool:
+        """Signal the download worker to pause. Returns False if no download is running."""
+        session = self.state.downloading_session
+        if session is None:
+            return False
+        session.cancel_event.set()
+        return True
+
+    @with_state_lock
+    def pause_download(self) -> None:
+        """Transition session from running to paused. Called by worker after catching DownloadPausedError."""
+        session = self.state.downloading_session
+        if session is None:
+            return
+        self.state.completed_download_sessions[session.id] = DownloadSessionPaused(
+            files_to_download=frozenset(session.files_to_download),
+            completed_files=frozenset(session.completed_files),
+            completed_bytes=session.completed_bytes,
+        )
+        self.state.downloading_session = None
+
+    def _make_progress_callback(
+        self, file_type: ModelFileType, initial_bytes: int = 0
+    ) -> Callable[[int], None]:
         last_sample_time = time.monotonic()
-        last_sample_bytes = 0
+        # Seed with ``initial_bytes`` so the first post-resume sample computes
+        # an accurate delta. Without this, the first speed reading would be
+        # ``(initial_bytes + delta) / elapsed`` — wildly inflated.
+        last_sample_bytes = initial_bytes
         smoothed_speed = 0.0
 
         def on_progress(downloaded: int) -> None:
             nonlocal last_sample_time, last_sample_bytes, smoothed_speed
+
+            session = self.state.downloading_session
+            if session is not None and session.cancel_event.is_set():
+                raise DownloadPausedError("Download paused by user")
+
             now = time.monotonic()
             elapsed = now - last_sample_time
             if elapsed >= 1.0:
@@ -142,6 +184,9 @@ class DownloadHandler(StateHandlerBase):
         return on_progress
 
     def _on_background_download_error(self, exc: Exception) -> None:
+        if isinstance(exc, DownloadPausedError):
+            self.pause_download()
+            return
         self.fail_download(str(exc))
 
     @with_state_lock
@@ -187,6 +232,8 @@ class DownloadHandler(StateHandlerBase):
                     return DownloadProgressCompleteResponse(status="complete")
                 case DownloadSessionError(error_message=error_message):
                     return DownloadProgressErrorResponse(status="error", error=error_message)
+                case DownloadSessionPaused():
+                    return DownloadProgressPausedResponse(status="paused")
 
         raise ValueError(f"Unknown download session: {session_id}")
 
@@ -206,6 +253,7 @@ class DownloadHandler(StateHandlerBase):
             dst.parent.mkdir(parents=True, exist_ok=True)
             src.rename(dst)
 
+    @with_state_lock
     def cleanup_downloading_dir(self) -> None:
         """Remove the .downloading/ staging dir and all partial/resume state.
 
@@ -213,7 +261,15 @@ class DownloadHandler(StateHandlerBase):
         user needs to recover from corrupted resume state. NOT called on
         app startup or on download errors — partial files there are
         intentionally preserved so ``huggingface_hub`` can resume them.
+
+        Raises ``DownloadInProgressError`` if a download is currently
+        running; holding the state lock ensures this check and the
+        ``rmtree`` are atomic with respect to ``start_model_download``.
         """
+        if self.state.downloading_session is not None:
+            raise DownloadInProgressError(
+                "Cannot clear partial downloads while a download is running"
+            )
         downloading = resolve_downloading_dir(self.models_dir)
         if downloading.exists():
             shutil.rmtree(downloading)
@@ -270,26 +326,31 @@ class DownloadHandler(StateHandlerBase):
             if initial_bytes > 0:
                 logger.info("Resuming %s from %d bytes", target_name, initial_bytes)
             self.start_file(file_type, target_name, initial_bytes=initial_bytes)
-            progress_cb = self._make_progress_callback(file_type)
+            progress_cb = self._make_progress_callback(file_type, initial_bytes=initial_bytes)
 
             resolve_downloading_dir(self.models_dir).mkdir(parents=True, exist_ok=True)
 
-            if spec.is_folder:
-                self._model_downloader.download_snapshot(
-                    repo_id=spec.repo_id,
-                    local_dir=str(resolve_downloading_path(self.models_dir, self.config.model_download_specs, file_type)),
-                    on_progress=progress_cb,
-                    ignore_patterns=list(spec.ignore_patterns) if spec.ignore_patterns else None,
-                    initial_bytes=initial_bytes,
-                )
-            else:
-                self._model_downloader.download_file(
-                    repo_id=spec.repo_id,
-                    filename=spec.name,
-                    local_dir=str(resolve_downloading_path(self.models_dir, self.config.model_download_specs, file_type)),
-                    on_progress=progress_cb,
-                    initial_bytes=initial_bytes,
-                )
+            try:
+                if spec.is_folder:
+                    self._model_downloader.download_snapshot(
+                        repo_id=spec.repo_id,
+                        local_dir=str(resolve_downloading_path(self.models_dir, self.config.model_download_specs, file_type)),
+                        on_progress=progress_cb,
+                        ignore_patterns=list(spec.ignore_patterns) if spec.ignore_patterns else None,
+                        initial_bytes=initial_bytes,
+                    )
+                else:
+                    self._model_downloader.download_file(
+                        repo_id=spec.repo_id,
+                        filename=spec.name,
+                        local_dir=str(resolve_downloading_path(self.models_dir, self.config.model_download_specs, file_type)),
+                        on_progress=progress_cb,
+                        initial_bytes=initial_bytes,
+                    )
+            except DownloadPausedError:
+                logger.info("Download paused by user during %s", target_name)
+                self.pause_download()
+                return
 
             self._move_to_final(file_type)
 
@@ -327,7 +388,7 @@ class DownloadHandler(StateHandlerBase):
             if initial_bytes > 0:
                 logger.info("Resuming text encoder from %d bytes", initial_bytes)
             self.start_file("text_encoder", text_spec.name, initial_bytes=initial_bytes)
-            progress_cb = self._make_progress_callback("text_encoder")
+            progress_cb = self._make_progress_callback("text_encoder", initial_bytes=initial_bytes)
             resolve_downloading_dir(self.models_dir).mkdir(parents=True, exist_ok=True)
             self._model_downloader.download_snapshot(
                 repo_id=text_spec.repo_id,
