@@ -5,19 +5,23 @@ from __future__ import annotations
 import gc
 import logging
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from api_types import ImageConditioningInput
 
+if TYPE_CHECKING:
+    from ltx_pipelines_mlx import ICLoraPipeline  # type: ignore[import-untyped]
+
 logger = logging.getLogger(__name__)
 
-_DEFAULT_MODEL_REPO = "dgrauet/ltx-2.3-mlx"
-_DEFAULT_TEXT_ENCODER_REPO = "mlx-community/gemma-3-12b-it-4bit"
+_DEFAULT_GEMMA_REPO = "mlx-community/gemma-3-12b-it-4bit"
 
 
 class MLXIcLoraPipeline:
-    """IC-LoRA controlled video generation pipeline using mlx_video on Apple Silicon.
+    """IC-LoRA controlled video generation using ltx-pipelines-mlx on Apple Silicon.
 
-    Uses generate_video() with LoRA weights for IC-LoRA controlled generation.
+    Wraps ICLoraPipeline for reference-conditioned generation with LoRA weights.
+    Pipeline persists across calls; low_memory=True manages component lifecycle.
     """
 
     @staticmethod
@@ -43,19 +47,38 @@ class MLXIcLoraPipeline:
         upsampler_path: str,
         lora_path: str,
     ) -> None:
-        self._checkpoint_path = checkpoint_path
-        self._gemma_root = gemma_root
         self._upsampler_path = upsampler_path
         self._lora_path = lora_path
+        self._pipeline: ICLoraPipeline | None = None
 
         checkpoint_p = Path(checkpoint_path)
         if checkpoint_p.is_dir():
-            self._model_repo = str(checkpoint_p)
+            self._model_dir = str(checkpoint_p)
         elif checkpoint_p.parent.exists():
-            self._model_repo = str(checkpoint_p.parent)
+            self._model_dir = str(checkpoint_p.parent)
         else:
-            self._model_repo = _DEFAULT_MODEL_REPO
-        self._text_encoder_repo = str(gemma_root) if gemma_root and Path(gemma_root).exists() else _DEFAULT_TEXT_ENCODER_REPO
+            self._model_dir = checkpoint_path
+
+        self._gemma_repo = (
+            str(gemma_root)
+            if gemma_root and Path(gemma_root).exists()
+            else _DEFAULT_GEMMA_REPO
+        )
+
+    def _ensure_loaded(self) -> None:
+        """Lazy-load the pipeline on first use."""
+        if self._pipeline is not None:
+            return
+        from ltx_pipelines_mlx import ICLoraPipeline  # type: ignore[import-untyped]
+
+        self._pipeline = ICLoraPipeline(
+            model_dir=self._model_dir,
+            lora_paths=[(self._lora_path, 1.0)],
+            gemma_model_id=self._gemma_repo,
+            low_memory=True,
+        )
+        self._pipeline.load()
+        logger.info("MLX ICLoraPipeline loaded from %s", self._model_dir)
 
     def generate(
         self,
@@ -70,35 +93,22 @@ class MLXIcLoraPipeline:
         output_path: str,
     ) -> None:
         """Generate video with IC-LoRA control via MLX."""
-        from mlx_video.models.ltx_2.generate import generate_video, PipelineType  # type: ignore[import-untyped]
-
         logger.info(
             "MLX IC-LoRA generate: prompt=%r seed=%d %dx%d %d frames",
             prompt[:50], seed, width, height, num_frames,
         )
 
-        image_arg: str | None = None
-        image_strength_arg: float = 1.0
-        if images:
-            image_arg = images[0].path
-            image_strength_arg = images[0].strength
+        self._ensure_loaded()
+        assert self._pipeline is not None
 
-        generate_video(
-            model_repo=self._model_repo,
-            text_encoder_repo=self._text_encoder_repo,
+        self._pipeline.generate_and_save(
             prompt=prompt,
-            pipeline=PipelineType.DISTILLED,
+            output_path=output_path,
+            video_conditioning=video_conditioning,
             height=height,
             width=width,
             num_frames=num_frames,
             seed=seed,
-            fps=int(frame_rate),
-            output_path=output_path,
-            spatial_upscaler=self._upsampler_path,
-            image=image_arg,
-            image_strength=image_strength_arg,
-            lora_path=self._lora_path,
-            lora_strength=1.0,
         )
 
         gc.collect()

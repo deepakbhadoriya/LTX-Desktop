@@ -6,22 +6,23 @@ import gc
 import logging
 import os
 from pathlib import Path
-from typing import Final
+from typing import TYPE_CHECKING, Final
 
 from api_types import ImageConditioningInput
 
+if TYPE_CHECKING:
+    from ltx_pipelines_mlx import ImageToVideoPipeline  # type: ignore[import-untyped]
+
 logger = logging.getLogger(__name__)
 
-# Default HF repo IDs for mlx_video — overridden if local paths exist.
-_DEFAULT_MODEL_REPO = "dgrauet/ltx-2.3-mlx"
-_DEFAULT_TEXT_ENCODER_REPO = "mlx-community/gemma-3-12b-it-4bit"
+_DEFAULT_GEMMA_REPO = "mlx-community/gemma-3-12b-it-4bit"
 
 
 class MLXVideoPipeline:
-    """Fast video generation pipeline using mlx_video on Apple Silicon.
+    """Fast video generation pipeline using ltx-pipelines-mlx on Apple Silicon.
 
-    Uses the mlx_video.models.ltx_2.generate.generate_video() function
-    which handles model loading, text encoding, inference, and video output.
+    Wraps ImageToVideoPipeline (handles both T2V and I2V).
+    Pipeline persists across calls; low_memory=True manages component lifecycle.
     """
 
     pipeline_kind: Final = "fast"
@@ -46,59 +47,38 @@ class MLXVideoPipeline:
         gemma_root: str | None,
         upsampler_path: str,
     ) -> None:
-        self._checkpoint_path = checkpoint_path
-        self._gemma_root = gemma_root
         self._upsampler_path = upsampler_path
+        self._pipeline: ImageToVideoPipeline | None = None
 
-        # Resolve model repo: use checkpoint path directly if it's a directory
-        # (folder download), otherwise use its parent (single-file download).
+        # Resolve model directory: dgrauet pipelines expect a directory
+        # containing all safetensors files.
         checkpoint_p = Path(checkpoint_path)
         if checkpoint_p.is_dir():
-            self._model_repo = str(checkpoint_p)
+            self._model_dir = str(checkpoint_p)
         elif checkpoint_p.parent.exists():
-            self._model_repo = str(checkpoint_p.parent)
+            self._model_dir = str(checkpoint_p.parent)
         else:
-            self._model_repo = _DEFAULT_MODEL_REPO
-        self._text_encoder_repo = str(gemma_root) if gemma_root and Path(gemma_root).exists() else _DEFAULT_TEXT_ENCODER_REPO
+            self._model_dir = checkpoint_path
 
-    def _run_inference(
-        self,
-        prompt: str,
-        seed: int,
-        height: int,
-        width: int,
-        num_frames: int,
-        frame_rate: float,
-        images: list[ImageConditioningInput],
-        output_path: str,
-    ) -> None:
-        """Run inference via mlx_video generate_video() and write output."""
-        from mlx_video.models.ltx_2.generate import generate_video, PipelineType  # type: ignore[import-untyped]
-
-        image_arg: str | None = None
-        image_strength_arg: float = 1.0
-        image_frame_idx_arg: int = 0
-        if images:
-            image_arg = images[0].path
-            image_strength_arg = images[0].strength
-            image_frame_idx_arg = images[0].frame_idx
-
-        generate_video(
-            model_repo=self._model_repo,
-            text_encoder_repo=self._text_encoder_repo,
-            prompt=prompt,
-            pipeline=PipelineType.DISTILLED,
-            height=height,
-            width=width,
-            num_frames=num_frames,
-            seed=seed,
-            fps=int(frame_rate),
-            output_path=output_path,
-            spatial_upscaler=self._upsampler_path,
-            image=image_arg,
-            image_strength=image_strength_arg,
-            image_frame_idx=image_frame_idx_arg,
+        self._gemma_repo = (
+            str(gemma_root)
+            if gemma_root and Path(gemma_root).exists()
+            else _DEFAULT_GEMMA_REPO
         )
+
+    def _ensure_loaded(self) -> None:
+        """Lazy-load the pipeline on first use."""
+        if self._pipeline is not None:
+            return
+        from ltx_pipelines_mlx import ImageToVideoPipeline  # type: ignore[import-untyped]
+
+        self._pipeline = ImageToVideoPipeline(
+            model_dir=self._model_dir,
+            gemma_model_id=self._gemma_repo,
+            low_memory=True,
+        )
+        self._pipeline.load()
+        logger.info("MLX ImageToVideoPipeline loaded from %s", self._model_dir)
 
     def generate(
         self,
@@ -117,15 +97,19 @@ class MLXVideoPipeline:
             prompt[:50], seed, width, height, num_frames, frame_rate,
         )
 
-        self._run_inference(
+        self._ensure_loaded()
+        assert self._pipeline is not None
+
+        image_arg: str | None = images[0].path if images else None
+
+        self._pipeline.generate_and_save(
             prompt=prompt,
-            seed=seed,
+            output_path=output_path,
+            image=image_arg,
             height=height,
             width=width,
             num_frames=num_frames,
-            frame_rate=frame_rate,
-            images=images,
-            output_path=output_path,
+            seed=seed,
         )
 
         gc.collect()
@@ -135,15 +119,15 @@ class MLXVideoPipeline:
         """Warmup pipeline with a small test generation."""
         logger.info("MLX pipeline warmup starting")
         try:
-            self._run_inference(
+            self._ensure_loaded()
+            assert self._pipeline is not None
+            self._pipeline.generate_and_save(
                 prompt="test warmup",
-                seed=42,
+                output_path=output_path,
                 height=256,
                 width=384,
                 num_frames=9,
-                frame_rate=8.0,
-                images=[],
-                output_path=output_path,
+                seed=42,
             )
         finally:
             if os.path.exists(output_path):
