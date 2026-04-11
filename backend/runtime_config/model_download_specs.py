@@ -112,18 +112,17 @@ DEFAULT_REQUIRED_MODEL_TYPES: frozenset[ModelFileType] = frozenset(
 # These replace the CUDA models when running on Mac with MLX inference.
 MLX_MODEL_DOWNLOAD_SPECS: dict[ModelFileType, ModelFileDownloadSpec] = {
     "checkpoint": ModelFileDownloadSpec(
-        relative_path=Path("mlx-ltx-2.3"),
-        expected_size_bytes=56_000_000_000,
+        relative_path=Path("mlx-ltx-2.3-q8"),
+        expected_size_bytes=59_000_000_000,
         is_folder=True,
-        repo_id="dgrauet/ltx-2.3-mlx",
-        description="LTX 2.3 Distilled (MLX bf16)",
-        ignore_patterns=("transformer-dev.safetensors",),
+        repo_id="dgrauet/ltx-2.3-mlx-q8",
+        description="LTX 2.3 (MLX Q8 quantized)",
     ),
     "upsampler": ModelFileDownloadSpec(
         relative_path=Path("spatial_upscaler_x2_v1_1.safetensors"),
         expected_size_bytes=996_000_000,
         is_folder=False,
-        repo_id="dgrauet/ltx-2.3-mlx",
+        repo_id="dgrauet/ltx-2.3-mlx-q8",
         description="2x Spatial Upscaler (MLX)",
     ),
     "text_encoder": ModelFileDownloadSpec(
@@ -134,11 +133,12 @@ MLX_MODEL_DOWNLOAD_SPECS: dict[ModelFileType, ModelFileDownloadSpec] = {
         description="Gemma text encoder (MLX 4-bit)",
     ),
     "zit": ModelFileDownloadSpec(
-        relative_path=Path("Z-Image-Turbo"),
-        expected_size_bytes=31_000_000_000,
+        relative_path=Path("flux2-klein-4b-mlx-4bit"),
+        expected_size_bytes=4_610_000_000,
         is_folder=True,
-        repo_id="Tongyi-MAI/Z-Image-Turbo",
-        description="Z-Image-Turbo model for text-to-image (mflux)",
+        repo_id="themindstudio/flux2-klein-4b-mlx-4bit",
+        description="Flux.2 Klein 4B (mflux 4-bit)",
+        ignore_patterns=("*.md", "*.png", "*.jpg", ".gitattributes", ".DS_Store"),
     ),
     "ic_lora": ModelFileDownloadSpec(
         relative_path=Path("ltx-2.3-22b-ic-lora-union-control-ref0.5.safetensors"),
