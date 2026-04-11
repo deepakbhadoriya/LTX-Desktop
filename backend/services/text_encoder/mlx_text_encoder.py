@@ -1,6 +1,6 @@
 """MLX text encoder — no-op implementation for Apple Silicon.
 
-On the MLX path, text encoding is handled internally by mlx_video.
+On the MLX path, text encoding is handled internally by ltx-pipelines-mlx.
 This stub satisfies the TextEncoder Protocol without touching torch or ltx_pipelines.
 """
 
@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 class MLXTextEncoder:
     """No-op text encoder for the MLX pipeline path.
 
-    The mlx_video pipeline handles prompt encoding internally using its own
+    The ltx-pipelines-mlx pipeline handles prompt encoding internally using its own
     text encoder, so the patching and API encoding facilities of LTXTextEncoder
     are not needed.
     """
