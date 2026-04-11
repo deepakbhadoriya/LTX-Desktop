@@ -7,6 +7,7 @@ import logging
 from fastapi import APIRouter, Depends, Query
 
 from api_types import (
+    ClearPartialDownloadsResponse,
     DownloadProgressResponse,
     ModelDownloadRequest,
     ModelDownloadStartResponse,
@@ -74,6 +75,21 @@ def route_model_download(
         )
 
     raise HTTPError(400, "Failed to start download")
+
+
+@router.post("/models/download/clear-partials", response_model=ClearPartialDownloadsResponse)
+def route_clear_partial_downloads(
+    handler: AppHandler = Depends(get_state_service),
+) -> ClearPartialDownloadsResponse:
+    """Wipe the .downloading/ staging dir, discarding all resume state.
+
+    Use this to recover from corrupted partial downloads. Will 409 if a
+    download is currently running.
+    """
+    if handler.downloads.is_download_running():
+        raise HTTPError(409, "Cannot clear partials while a download is running")
+    handler.downloads.cleanup_downloading_dir()
+    return ClearPartialDownloadsResponse()
 
 
 @router.post("/text-encoder/download", response_model=TextEncoderDownloadResponse)

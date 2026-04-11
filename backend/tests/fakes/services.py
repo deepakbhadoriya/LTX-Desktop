@@ -307,13 +307,23 @@ class FakeModelDownloader:
         filename: str,
         local_dir: str,
         on_progress: Callable[[int], None] | None = None,
+        initial_bytes: int = 0,
     ) -> Path:
         self._raise_if_needed()
-        self.calls.append({"kind": "file", "repo_id": repo_id, "filename": filename, "local_dir": local_dir, "on_progress": on_progress})
+        self.calls.append(
+            {
+                "kind": "file",
+                "repo_id": repo_id,
+                "filename": filename,
+                "local_dir": local_dir,
+                "on_progress": on_progress,
+                "initial_bytes": initial_bytes,
+            }
+        )
 
         if on_progress is not None:
-            on_progress(512)
-            on_progress(1024)
+            on_progress(initial_bytes + 512)
+            on_progress(initial_bytes + 1024)
 
         destination = Path(local_dir) / filename
         destination.parent.mkdir(parents=True, exist_ok=True)
@@ -326,6 +336,7 @@ class FakeModelDownloader:
         local_dir: str,
         on_progress: Callable[[int], None] | None = None,
         ignore_patterns: list[str] | None = None,
+        initial_bytes: int = 0,
     ) -> Path:
         self._raise_if_needed()
         self.calls.append(
@@ -334,12 +345,13 @@ class FakeModelDownloader:
                 "repo_id": repo_id,
                 "local_dir": local_dir,
                 "on_progress": on_progress,
+                "initial_bytes": initial_bytes,
             }
         )
 
         if on_progress is not None:
-            on_progress(512)
-            on_progress(1024)
+            on_progress(initial_bytes + 512)
+            on_progress(initial_bytes + 1024)
 
         root = Path(local_dir)
         root.mkdir(parents=True, exist_ok=True)

@@ -74,7 +74,7 @@ class DownloadHandler(StateHandlerBase):
         return session_id
 
     @with_state_lock
-    def start_file(self, file_type: ModelFileType, target: str) -> None:
+    def start_file(self, file_type: ModelFileType, target: str, initial_bytes: int = 0) -> None:
         session = self.state.downloading_session
         if session is None:
             return
@@ -84,7 +84,7 @@ class DownloadHandler(StateHandlerBase):
         session.current_running_file = FileDownloadRunning(
             file_type=file_type,
             target_path=target,
-            downloaded_bytes=0,
+            downloaded_bytes=initial_bytes,
             speed_bytes_per_sec=0.0,
         )
 
@@ -207,10 +207,38 @@ class DownloadHandler(StateHandlerBase):
             src.rename(dst)
 
     def cleanup_downloading_dir(self) -> None:
-        """Remove stale .downloading/ dir (leftover from crashed downloads)."""
+        """Remove the .downloading/ staging dir and all partial/resume state.
+
+        Called by the /api/models/download/clear-partials endpoint when the
+        user needs to recover from corrupted resume state. NOT called on
+        app startup or on download errors — partial files there are
+        intentionally preserved so ``huggingface_hub`` can resume them.
+        """
         downloading = resolve_downloading_dir(self.models_dir)
         if downloading.exists():
             shutil.rmtree(downloading)
+
+    def _resumable_bytes_for(self, file_type: ModelFileType) -> int:
+        """Return bytes already staged on disk for *file_type* from a prior
+        interrupted download session.
+
+        ``huggingface_hub`` (>=0.23) stages partial files as
+        ``{local_dir}/.cache/huggingface/download/*.incomplete`` when
+        ``local_dir`` is set, and resumes them transparently on the next
+        download call. We sum these sizes so the progress bar starts at the
+        correct already-downloaded position instead of 0.
+        """
+        local_dir = resolve_downloading_path(self.models_dir, self.config.model_download_specs, file_type)
+        hf_cache = local_dir / ".cache" / "huggingface" / "download"
+        if not hf_cache.exists():
+            return 0
+        total = 0
+        for entry in hf_cache.rglob("*.incomplete"):
+            try:
+                total += entry.stat().st_size
+            except OSError:
+                continue
+        return total
 
     def _discover_files_to_download(self, model_types: set[ModelFileType]) -> dict[ModelFileType, str]:
         """Determine which files need downloading (not already available)."""
@@ -238,34 +266,37 @@ class DownloadHandler(StateHandlerBase):
             spec = self.config.spec_for(file_type)
             logger.info("Downloading %s from %s", target_name, spec.repo_id)
 
-            self.start_file(file_type, target_name)
+            initial_bytes = self._resumable_bytes_for(file_type)
+            if initial_bytes > 0:
+                logger.info("Resuming %s from %d bytes", target_name, initial_bytes)
+            self.start_file(file_type, target_name, initial_bytes=initial_bytes)
             progress_cb = self._make_progress_callback(file_type)
 
-            try:
-                resolve_downloading_dir(self.models_dir).mkdir(parents=True, exist_ok=True)
+            resolve_downloading_dir(self.models_dir).mkdir(parents=True, exist_ok=True)
 
-                if spec.is_folder:
-                    self._model_downloader.download_snapshot(
-                        repo_id=spec.repo_id,
-                        local_dir=str(resolve_downloading_path(self.models_dir, self.config.model_download_specs, file_type)),
-                        on_progress=progress_cb,
-                        ignore_patterns=list(spec.ignore_patterns) if spec.ignore_patterns else None,
-                    )
-                else:
-                    self._model_downloader.download_file(
-                        repo_id=spec.repo_id,
-                        filename=spec.name,
-                        local_dir=str(resolve_downloading_path(self.models_dir, self.config.model_download_specs, file_type)),
-                        on_progress=progress_cb,
-                    )
+            if spec.is_folder:
+                self._model_downloader.download_snapshot(
+                    repo_id=spec.repo_id,
+                    local_dir=str(resolve_downloading_path(self.models_dir, self.config.model_download_specs, file_type)),
+                    on_progress=progress_cb,
+                    ignore_patterns=list(spec.ignore_patterns) if spec.ignore_patterns else None,
+                    initial_bytes=initial_bytes,
+                )
+            else:
+                self._model_downloader.download_file(
+                    repo_id=spec.repo_id,
+                    filename=spec.name,
+                    local_dir=str(resolve_downloading_path(self.models_dir, self.config.model_download_specs, file_type)),
+                    on_progress=progress_cb,
+                    initial_bytes=initial_bytes,
+                )
 
-                self._move_to_final(file_type)
-            except Exception:
-                self.cleanup_downloading_dir()
-                raise
+            self._move_to_final(file_type)
 
         self.finish_download()
         self._models_handler.refresh_available_files()
+        # All files moved out — best-effort tidy of leftover HF cache metadata.
+        shutil.rmtree(resolve_downloading_dir(self.models_dir), ignore_errors=True)
 
     def start_model_download(self, model_types: set[ModelFileType]) -> DownloadSessionId | None:
         with self._lock:
@@ -292,21 +323,22 @@ class DownloadHandler(StateHandlerBase):
         session_id = self.start_download({"text_encoder"})
 
         def worker() -> None:
-            self.start_file("text_encoder", text_spec.name)
+            initial_bytes = self._resumable_bytes_for("text_encoder")
+            if initial_bytes > 0:
+                logger.info("Resuming text encoder from %d bytes", initial_bytes)
+            self.start_file("text_encoder", text_spec.name, initial_bytes=initial_bytes)
             progress_cb = self._make_progress_callback("text_encoder")
-            try:
-                resolve_downloading_dir(self.models_dir).mkdir(parents=True, exist_ok=True)
-                self._model_downloader.download_snapshot(
-                    repo_id=text_spec.repo_id,
-                    local_dir=str(resolve_downloading_path(self.models_dir, self.config.model_download_specs, "text_encoder")),
-                    on_progress=progress_cb,
-                )
-                self._move_to_final("text_encoder")
-            except Exception:
-                self.cleanup_downloading_dir()
-                raise
+            resolve_downloading_dir(self.models_dir).mkdir(parents=True, exist_ok=True)
+            self._model_downloader.download_snapshot(
+                repo_id=text_spec.repo_id,
+                local_dir=str(resolve_downloading_path(self.models_dir, self.config.model_download_specs, "text_encoder")),
+                on_progress=progress_cb,
+                initial_bytes=initial_bytes,
+            )
+            self._move_to_final("text_encoder")
             self.finish_download()
             self._models_handler.refresh_available_files()
+            shutil.rmtree(resolve_downloading_dir(self.models_dir), ignore_errors=True)
 
         self._task_runner.run_background(
             worker,

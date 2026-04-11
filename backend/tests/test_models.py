@@ -290,13 +290,17 @@ class TestAtomicDownloads:
         """Files in .downloading/ must NOT be reported as downloaded."""
         downloading = _downloading_dir(test_state)
         downloading.mkdir(parents=True, exist_ok=True)
-        (downloading / "ltx-2-19b-distilled-fp8.safetensors").write_bytes(b"\x00" * 1024)
+        (downloading / "ltx-2.3-22b-distilled.safetensors").write_bytes(b"\x00" * 1024)
 
         test_state.models.refresh_available_files()
         assert test_state.state.available_files["checkpoint"] is None
 
-    def test_cleanup_downloading_dir_on_startup(self, test_state):
-        """cleanup_downloading_dir() removes stale .downloading/ dir."""
+    def test_cleanup_downloading_dir_removes_dir(self, test_state):
+        """cleanup_downloading_dir() wipes the .downloading/ staging dir.
+
+        Reachable only via the clear-partials endpoint — NOT called on
+        startup or on download errors (resume state is preserved there).
+        """
         downloading = _downloading_dir(test_state)
         downloading.mkdir(parents=True, exist_ok=True)
         (downloading / "partial-file.safetensors").write_bytes(b"\x00" * 1024)
@@ -333,17 +337,96 @@ class TestAtomicDownloads:
         downloading = _downloading_dir(test_state)
         assert not downloading.exists() or not any(downloading.iterdir())
 
-    def test_failed_download_cleans_up_downloading_dir(self, test_state):
-        """On download failure, .downloading/ is cleaned up."""
-        test_state.model_downloader.fail_next = RuntimeError("network error")
+    def test_failed_download_preserves_partial_files_for_resume(self, test_state):
+        """On download failure, .downloading/ is preserved so the next
+        attempt can resume via huggingface_hub's .incomplete files."""
+        downloading = _downloading_dir(test_state)
+        downloading.mkdir(parents=True, exist_ok=True)
+        # Simulate pre-existing partial state from a previous session.
+        hf_cache = downloading / ".cache" / "huggingface" / "download"
+        hf_cache.mkdir(parents=True, exist_ok=True)
+        (hf_cache / "checkpoint.incomplete").write_bytes(b"\x00" * 4096)
 
+        test_state.model_downloader.fail_next = RuntimeError("network error")
         test_state.downloads.start_model_download({"checkpoint"})
 
-        # The error handler should have been called
+        assert len(test_state.task_runner.errors) == 1
+        # Partial state must survive the error so resume works.
+        assert downloading.exists()
+        assert (hf_cache / "checkpoint.incomplete").exists()
+
+    def test_resume_seeds_initial_bytes(self, test_state):
+        """When .incomplete bytes exist on disk, the running session's
+        downloaded_bytes starts at that value — not 0 — so the progress
+        bar reflects the resumed position."""
+        from runtime_config.model_download_specs import resolve_downloading_path
+
+        checkpoint_local_dir = resolve_downloading_path(
+            test_state.config.default_models_dir,
+            test_state.config.model_download_specs,
+            "checkpoint",
+        )
+        hf_cache = checkpoint_local_dir / ".cache" / "huggingface" / "download"
+        hf_cache.mkdir(parents=True, exist_ok=True)
+        (hf_cache / "ltx-2.3-22b-distilled.safetensors.incomplete").write_bytes(b"\x00" * 2048)
+
+        assert test_state.downloads._resumable_bytes_for("checkpoint") == 2048
+
+        # The fake downloader reports on_progress(initial_bytes + 512) / (+ 1024),
+        # so the completed bytes for the file end up at initial_bytes + 1024.
+        test_state.downloads.start_model_download({"checkpoint"})
+
+        calls = [c for c in test_state.model_downloader.calls if c["kind"] == "file" and c["filename"] == "ltx-2.3-22b-distilled.safetensors"]
+        assert calls, "expected checkpoint file download call"
+        assert calls[0]["initial_bytes"] == 2048
+
+    def test_clear_partials_endpoint(self, client, test_state):
+        """POST /api/models/download/clear-partials wipes .downloading/."""
+        downloading = _downloading_dir(test_state)
+        downloading.mkdir(parents=True, exist_ok=True)
+        (downloading / "stale.incomplete").write_bytes(b"\x00" * 512)
+
+        r = client.post("/api/models/download/clear-partials")
+        assert r.status_code == 200
+        assert r.json()["status"] == "ok"
+        assert not downloading.exists()
+
+    def test_clear_partials_rejects_when_download_running(self, client, test_state):
+        """clear-partials must 409 while a download is in progress."""
+        test_state.downloads.start_download({"checkpoint"})
+        r = client.post("/api/models/download/clear-partials")
+        assert r.status_code == 409
+
+    def test_resume_across_simulated_restart(self, test_state):
+        """First attempt fails mid-download; partial state persists; second
+        attempt picks up the accumulated bytes and passes them as
+        initial_bytes to the downloader."""
+        from runtime_config.model_download_specs import resolve_downloading_path
+
+        # Attempt 1: fails before writing partial file — simulate it manually.
+        test_state.model_downloader.fail_next = RuntimeError("network dropped")
+        test_state.downloads.start_model_download({"checkpoint"})
         assert len(test_state.task_runner.errors) == 1
 
-        downloading = _downloading_dir(test_state)
-        assert not downloading.exists()
+        # Simulate huggingface_hub having written 3 KB of partial data before
+        # the failure.
+        local_dir = resolve_downloading_path(
+            test_state.config.default_models_dir,
+            test_state.config.model_download_specs,
+            "checkpoint",
+        )
+        hf_cache = local_dir / ".cache" / "huggingface" / "download"
+        hf_cache.mkdir(parents=True, exist_ok=True)
+        (hf_cache / "ltx-2.3-22b-distilled.safetensors.incomplete").write_bytes(b"\x00" * 3072)
+
+        # Attempt 2: should pick up the 3072 bytes as initial_bytes.
+        test_state.downloads.start_model_download({"checkpoint"})
+
+        file_calls = [c for c in test_state.model_downloader.calls if c["kind"] == "file" and c["filename"] == "ltx-2.3-22b-distilled.safetensors"]
+        # First attempt failed before calls[] was appended (fail_next fires at start),
+        # so we expect one successful call with initial_bytes=3072.
+        assert len(file_calls) == 1
+        assert file_calls[0]["initial_bytes"] == 3072
 
 
 class TestHuggingFaceInternals:

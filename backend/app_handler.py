@@ -214,8 +214,11 @@ class AppHandler:
             video_processor=video_processor,
             config=config,
         )
-
-        self.downloads.cleanup_downloading_dir()
+#       self.downloads.cleanup_downloading_dir()
+        # Note: we intentionally do NOT clean up .downloading/ here. Any
+        # partial files left over from a previous session represent resume
+        # state — ``huggingface_hub`` will pick them up on the next download
+        # call. Users can force a reset via POST /api/models/download/clear-partials.
         self.models.refresh_available_files()
 
 

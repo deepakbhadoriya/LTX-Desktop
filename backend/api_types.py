@@ -156,6 +156,10 @@ DownloadProgressResponse: TypeAlias = (
 )
 
 
+class ClearPartialDownloadsResponse(BaseModel):
+    status: Literal["ok"] = "ok"
+
+
 class SuggestGapPromptResponse(BaseModel):
     status: Literal["success"] = "success"
     suggested_prompt: str
