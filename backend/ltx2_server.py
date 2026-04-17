@@ -1,4 +1,7 @@
 """FastAPI composition root for the LTX backend server."""
+
+from __future__ import annotations
+
 import faulthandler
 import os
 import sys
@@ -26,22 +29,27 @@ import threading
 
 # Note: expandable_segments is not supported on all platforms
 
-import torch
+import platform as _platform
 
-import services.patches.record_stream_fix as _record_stream_fix  # pyright: ignore[reportUnusedImport]  # Remove once ltx-core includes the fix
-del _record_stream_fix
-import services.patches.safetensors_loader_fix as _safetensors_loader_fix  # pyright: ignore[reportUnusedImport]  # Remove once safetensors/PyTorch fix the mmap issue
-del _safetensors_loader_fix
-import services.patches.safetensors_metadata_fix as _safetensors_metadata_fix  # pyright: ignore[reportUnusedImport]  # Remove once safetensors supports read-only mmap
-del _safetensors_metadata_fix
+_IS_DARWIN = _platform.system() == "Darwin"
+
+# On macOS we use MLX — torch is not needed and may not be installed.
+if not _IS_DARWIN:
+    import torch
+
+    # CUDA-specific patches
+    import services.patches.record_stream_fix as _record_stream_fix  # pyright: ignore[reportUnusedImport]  # Remove once ltx-core includes the fix
+    del _record_stream_fix
+    import services.patches.safetensors_loader_fix as _safetensors_loader_fix  # pyright: ignore[reportUnusedImport]  # Remove once safetensors/PyTorch fix the mmap issue
+    del _safetensors_loader_fix
+    import services.patches.safetensors_metadata_fix as _safetensors_metadata_fix  # pyright: ignore[reportUnusedImport]  # Remove once safetensors supports read-only mmap
+    del _safetensors_metadata_fix
 
 from state.app_settings import AppSettings
 
 # ============================================================
 # Logging Configuration
 # ============================================================
-
-import platform
 
 # Backend logs to console only — Electron captures stdout/stderr and writes
 # them to the session log file. This ensures *all* output (including early
@@ -56,11 +64,12 @@ logger = logging.getLogger(__name__)
 # ============================================================
 # SageAttention Integration
 # ============================================================
-use_sage_attention = os.environ.get("USE_SAGE_ATTENTION", "1") == "1"
+use_sage_attention = os.environ.get("USE_SAGE_ATTENTION", "1") == "1" and not _IS_DARWIN
 _sageattention_runtime_fallback_logged = False
 
 if use_sage_attention:
     try:
+        import torch
         from sageattention import sageattn  # type: ignore[reportMissingImports]
         import torch.nn.functional as F
 
@@ -113,16 +122,26 @@ if use_sage_attention:
 PORT = 0
 
 
-def _get_device() -> torch.device:
+def _get_device() -> str:  # Returns "mlx" on Darwin, torch.device on others (str is the common base)
+    if _IS_DARWIN:
+        return "mlx"
+    import torch
     if torch.cuda.is_available():
-        return torch.device("cuda")
+        return str(torch.device("cuda"))
     if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
-        return torch.device("mps")
-    return torch.device("cpu")
+        return str(torch.device("mps"))
+    return str(torch.device("cpu"))
 
 
-DEVICE = _get_device()
-DTYPE = torch.bfloat16
+def _get_dtype() -> object | None:
+    if _IS_DARWIN:
+        return None
+    import torch
+    return torch.bfloat16
+
+
+DEVICE: str = _get_device()
+DTYPE: object | None = _get_dtype()
 
 def _resolve_app_data_dir() -> Path:
     env_path = os.environ.get("LTX_APP_DATA_DIR")
@@ -145,7 +164,7 @@ PROJECT_ROOT = Path(__file__).parent.parent
 OUTPUTS_DIR = APP_DATA_DIR / "outputs"
 OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
 
-logger.info(f"Models directory: {DEFAULT_MODELS_DIR}")
+logger.info("Models directory: %s", DEFAULT_MODELS_DIR)
 
 # ============================================================
 # Settings
@@ -159,7 +178,12 @@ DEFAULT_APP_SETTINGS = AppSettings()
 
 from app_factory import DEFAULT_ALLOWED_ORIGINS, create_app
 from state import RuntimeConfig, build_initial_state
-from runtime_config.model_download_specs import DEFAULT_MODEL_DOWNLOAD_SPECS, DEFAULT_REQUIRED_MODEL_TYPES
+from runtime_config.model_download_specs import (
+    DEFAULT_MODEL_DOWNLOAD_SPECS,
+    DEFAULT_REQUIRED_MODEL_TYPES,
+    MLX_MODEL_DOWNLOAD_SPECS,
+    MLX_REQUIRED_MODEL_TYPES,
+)
 from runtime_config.runtime_policy import decide_force_api_generations
 from state.app_state_types import ModelFileType
 from server_utils.model_layout_migration import migrate_legacy_models_layout
@@ -172,7 +196,7 @@ LTX_API_BASE_URL = "https://api.ltx.video"
 
 def _resolve_force_api_generations() -> bool:
     gpu_info = GpuInfoImpl()
-    system = platform.system()
+    system = _platform.system()
     cuda_available = gpu_info.get_cuda_available()
     vram_gb = gpu_info.get_vram_total_gb()
 
@@ -193,8 +217,12 @@ def _resolve_force_api_generations() -> bool:
 
 
 FORCE_API_GENERATIONS = _resolve_force_api_generations()
+
+model_download_specs = MLX_MODEL_DOWNLOAD_SPECS if _IS_DARWIN else DEFAULT_MODEL_DOWNLOAD_SPECS
+base_required = MLX_REQUIRED_MODEL_TYPES if _IS_DARWIN else DEFAULT_REQUIRED_MODEL_TYPES
+
 REQUIRED_MODEL_TYPES: frozenset[ModelFileType] = (
-    frozenset() if FORCE_API_GENERATIONS else DEFAULT_REQUIRED_MODEL_TYPES
+    frozenset() if FORCE_API_GENERATIONS else base_required
 )
 
 CAMERA_MOTION_PROMPTS = {
@@ -214,7 +242,7 @@ DEFAULT_NEGATIVE_PROMPT = """blurry, out of focus, overexposed, underexposed, lo
 runtime_config = RuntimeConfig(
     device=DEVICE,
     default_models_dir=DEFAULT_MODELS_DIR,
-    model_download_specs=DEFAULT_MODEL_DOWNLOAD_SPECS,
+    model_download_specs=model_download_specs,
     required_model_types=REQUIRED_MODEL_TYPES,
     outputs_dir=OUTPUTS_DIR,
     settings_file=SETTINGS_FILE,
@@ -261,11 +289,15 @@ def log_hardware_info() -> None:
     gpu_info = gpu.get_gpu_info()
     vram_gb = gpu_info["vram"] // 1024 if gpu_info["vram"] else 0
 
-    logger.info(f"Platform: {platform.system()} ({platform.machine()})")
-    logger.info(f"Device: {DEVICE}  |  Dtype: {DTYPE}")
-    logger.info(f"GPU: {gpu_info['name']}  |  VRAM: {vram_gb} GB")
-    logger.info(f"SageAttention: {'enabled' if use_sage_attention else 'disabled'}")
-    logger.info(f"Python: {sys.version.split()[0]}  |  Torch: {torch.__version__}")
+    logger.info("Platform: %s (%s)", _platform.system(), _platform.machine())
+    logger.info("Device: %s  |  Dtype: %s", DEVICE, DTYPE)
+    logger.info("GPU: %s  |  VRAM: %s GB", gpu_info["name"], vram_gb)
+    logger.info("SageAttention: %s", "enabled" if use_sage_attention else "disabled")
+    if _IS_DARWIN:
+        logger.info("Python: %s  |  Backend: MLX", sys.version.split()[0])
+    else:
+        import torch as _torch
+        logger.info("Python: %s  |  Torch: %s", sys.version.split()[0], _torch.__version__)
 
 
 if __name__ == "__main__":

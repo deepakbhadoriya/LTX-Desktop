@@ -2,12 +2,9 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Protocol
+from typing import Protocol
 
 from api_types import ImageConditioningInput
-
-if TYPE_CHECKING:
-    import torch
 
 
 class IcLoraPipeline(Protocol):
@@ -17,7 +14,7 @@ class IcLoraPipeline(Protocol):
         gemma_root: str | None,
         upsampler_path: str,
         lora_path: str,
-        device: torch.device,
+        device: object,
     ) -> "IcLoraPipeline":
         ...
 

@@ -9,8 +9,6 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 from threading import RLock
-from typing import TYPE_CHECKING
-
 from api_types import (
     ConditioningType,
     IcLoraExtractRequest,
@@ -32,9 +30,6 @@ from state.conditioning_cache import ConditioningCacheEntry, ConditioningCacheKe
 from services.interfaces import VideoProcessor
 from services.services_utils import FrameArray
 from state.app_state_types import AppState, ICLoraState
-
-if TYPE_CHECKING:
-    from runtime_config.runtime_config import RuntimeConfig
 
 logger = logging.getLogger(__name__)
 
@@ -73,12 +68,20 @@ class IcLoraHandler(StateHandlerBase):
                 raise HTTPError(400, f"Unsupported conditioning_type: {conditioning_type}")
 
     def _require_ic_lora_model_paths(self) -> tuple[Path, Path]:
-        lora_path = resolve_model_path(self.models_dir, self.config.model_download_specs,"ic_lora")
-        depth_model_path = resolve_model_path(self.models_dir, self.config.model_download_specs,"depth_processor")
+        if "ic_lora" not in self.config.model_download_specs:
+            raise HTTPError(400, "IC-LoRA is not available on this platform")
+        lora_path = resolve_model_path(self.models_dir, self.config.model_download_specs, "ic_lora")
         if not lora_path.exists():
             raise HTTPError(400, f"IC-LoRA model not found: {lora_path}")
-        if not depth_model_path.exists():
-            raise HTTPError(400, f"Depth processor model not found: {depth_model_path}")
+
+        if "depth_processor" in self.config.model_download_specs:
+            depth_model_path = resolve_model_path(self.models_dir, self.config.model_download_specs, "depth_processor")
+            if not depth_model_path.exists():
+                raise HTTPError(400, f"Depth processor model not found: {depth_model_path}")
+        else:
+            # MLX depth pipeline does not require model files — use placeholder path.
+            depth_model_path = self.models_dir / "depth-not-required"
+
         return lora_path, depth_model_path
 
     def extract_conditioning(self, req: IcLoraExtractRequest) -> IcLoraExtractResponse:

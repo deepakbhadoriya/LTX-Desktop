@@ -7,17 +7,20 @@ import logging
 from fastapi import APIRouter, Depends, Query
 
 from api_types import (
+    ClearPartialDownloadsResponse,
     DownloadProgressResponse,
     ModelDownloadRequest,
     ModelDownloadStartResponse,
     ModelInfo,
     ModelsStatusResponse,
+    PauseDownloadResponse,
     RequiredModelsResponse,
     TextEncoderAlreadyDownloadedResponse,
     TextEncoderDownloadStartedResponse,
     TextEncoderDownloadResponse,
 )
 from _routes._errors import HTTPError
+from handlers.download_handler import DownloadInProgressError
 from state import get_state_service
 from app_handler import AppHandler
 
@@ -74,6 +77,37 @@ def route_model_download(
         )
 
     raise HTTPError(400, "Failed to start download")
+
+
+@router.post("/models/download/clear-partials", response_model=ClearPartialDownloadsResponse)
+def route_clear_partial_downloads(
+    handler: AppHandler = Depends(get_state_service),
+) -> ClearPartialDownloadsResponse:
+    """Wipe the .downloading/ staging dir, discarding all resume state.
+
+    Use this to recover from corrupted partial downloads. Returns 409 if a
+    download is currently running. The check-and-rmtree is performed under
+    the state lock so it's race-free against ``start_model_download``.
+    """
+    try:
+        handler.downloads.cleanup_downloading_dir()
+    except DownloadInProgressError as exc:
+        raise HTTPError(409, str(exc)) from exc
+    return ClearPartialDownloadsResponse()
+
+
+@router.post("/models/download/pause", response_model=PauseDownloadResponse)
+def route_pause_download(
+    handler: AppHandler = Depends(get_state_service),
+) -> PauseDownloadResponse:
+    """Request the running download to pause.
+
+    The pause is asynchronous — the download worker will stop after the
+    current chunk completes. Returns 409 if no download is running.
+    """
+    if not handler.downloads.request_pause():
+        raise HTTPError(409, "No download in progress")
+    return PauseDownloadResponse()
 
 
 @router.post("/text-encoder/download", response_model=TextEncoderDownloadResponse)

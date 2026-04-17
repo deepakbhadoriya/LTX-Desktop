@@ -36,6 +36,7 @@ export function LaunchGate({
   const [downloadProgress, setDownloadProgress] = useState<Awaited<ReturnType<typeof ApiClient.getModelDownloadProgress>> | null>(null)
   const [downloadError, setDownloadError] = useState<string | null>(null)
   const [downloadSessionId, setDownloadSessionId] = useState<string | null>(null)
+  const [isPaused, setIsPaused] = useState(false)
   const [installMessage, setInstallMessage] = useState(INSTALL_MESSAGES[0])
   const [availableSpace, setAvailableSpace] = useState('...')
   const [videoPath, setVideoPath] = useState('/splash/splash.mp4')
@@ -143,7 +144,9 @@ export function LaunchGate({
         const progress = await ApiClient.getModelDownloadProgress({ sessionId: downloadSessionId })
         setDownloadProgress(progress)
 
-        if (progress.status === 'error') {
+        if (progress.status === 'paused') {
+          setIsPaused(true)
+        } else if (progress.status === 'error') {
           setDownloadError(progress.error || 'Download failed.')
         } else if (progress.status === 'complete') {
           setTimeout(() => setCurrentStep('complete'), 600)
@@ -194,6 +197,19 @@ export function LaunchGate({
 
   const retryInstallation = () => {
     setDownloadError(null)
+    startInstallation()
+  }
+
+  const pauseInstallation = async () => {
+    try {
+      await ApiClient.pauseModelDownload()
+    } catch (e) {
+      logger.error(`Pause error: ${e}`)
+    }
+  }
+
+  const resumeInstallation = () => {
+    setIsPaused(false)
     startInstallation()
   }
 
@@ -669,11 +685,27 @@ export function LaunchGate({
                   marginBottom: 8
                 }}>
                   <span style={{ fontSize: 13, fontWeight: 500 }}>
-                    {totalProgress > 85 ? 'Installing...' : 'Downloading...'}
+                    {isPaused ? 'Paused' : totalProgress > 85 ? 'Installing...' : 'Downloading...'}
                   </span>
-                  <span style={{ fontSize: 13, color: '#A98BD9', fontWeight: 600 }}>
-                    {Math.round(totalProgress)}%
-                  </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <span style={{ fontSize: 13, color: '#A98BD9', fontWeight: 600 }}>
+                      {Math.round(totalProgress)}%
+                    </span>
+                    <button
+                      onClick={isPaused ? resumeInstallation : pauseInstallation}
+                      style={{
+                        background: 'transparent',
+                        border: '1px solid #444',
+                        borderRadius: 4,
+                        color: '#a0a0a0',
+                        fontSize: 12,
+                        padding: '2px 10px',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      {isPaused ? 'Resume' : 'Pause'}
+                    </button>
+                  </div>
                 </div>
 
                 {/* Progress Bar */}

@@ -14,6 +14,7 @@ class ModelDownloader(Protocol):
         filename: str,
         local_dir: str,
         on_progress: Callable[[int], None] | None = None,
+        initial_bytes: int = 0,
     ) -> Path: ...
 
     def download_snapshot(
@@ -21,4 +22,6 @@ class ModelDownloader(Protocol):
         repo_id: str,
         local_dir: str,
         on_progress: Callable[[int], None] | None = None,
+        ignore_patterns: list[str] | None = None,
+        initial_bytes: int = 0,
     ) -> Path: ...

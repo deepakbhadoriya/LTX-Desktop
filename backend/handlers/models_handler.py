@@ -33,6 +33,9 @@ class ModelsHandler(StateHandlerBase):
     def _scan_available_files(self) -> AvailableFiles:
         files: AvailableFiles = {}
         for model_type in MODEL_FILE_ORDER:
+            if model_type not in self.config.model_download_specs:
+                files[model_type] = None
+                continue
             spec = self.config.spec_for(model_type)
             path = resolve_model_path(self.models_dir, self.config.model_download_specs, model_type)
             if spec.is_folder:
@@ -85,7 +88,9 @@ class ModelsHandler(StateHandlerBase):
         return [
             model_type
             for model_type in MODEL_FILE_ORDER
-            if model_type in required and not (skip_text_encoder and model_type == "text_encoder")
+            if model_type in required
+            and model_type in self.config.model_download_specs
+            and not (skip_text_encoder and model_type == "text_encoder")
         ]
 
     def get_models_status(self, has_api_key: bool | None = None) -> ModelsStatusResponse:
@@ -105,6 +110,8 @@ class ModelsHandler(StateHandlerBase):
         )
 
         for model_type in MODEL_FILE_ORDER:
+            if model_type not in self.config.model_download_specs:
+                continue
             spec = self.config.spec_for(model_type)
             path = files[model_type]
             exists = path is not None

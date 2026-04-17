@@ -103,8 +103,8 @@ class PipelinesHandler(StateHandlerBase):
             return state
         if state.is_compiled:
             return state
-        if self._runtime_device == "mps":
-            logger.info("Skipping torch.compile() for %s - not supported on MPS", state.pipeline.pipeline_kind)
+        if self._runtime_device in ("mps", "mlx"):
+            logger.info("Skipping torch.compile() for %s - not supported on %s", state.pipeline.pipeline_kind, self._runtime_device)
             return state
 
         try:
@@ -359,9 +359,11 @@ class PipelinesHandler(StateHandlerBase):
 
         self._evict_gpu_pipeline_for_swap()
 
-        from ltx_core.quantization import QuantizationPolicy
+        quantization: object | None = None
+        if quantized:
+            from ltx_core.quantization import QuantizationPolicy
+            quantization = QuantizationPolicy.fp8_cast()
 
-        quantization = QuantizationPolicy.fp8_cast() if quantized else None
         pipeline = self._retake_pipeline_class.create(
             checkpoint_path=str(resolve_model_path(self.models_dir, self.config.model_download_specs,"checkpoint")),
             gemma_root=self._text_handler.resolve_gemma_root(),

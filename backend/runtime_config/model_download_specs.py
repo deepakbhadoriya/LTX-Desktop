@@ -17,6 +17,7 @@ class ModelFileDownloadSpec:
     is_folder: bool
     repo_id: str
     description: str
+    ignore_patterns: tuple[str, ...] | None = None
 
     @property
     def name(self) -> str:
@@ -104,6 +105,51 @@ DEFAULT_MODEL_DOWNLOAD_SPECS: dict[ModelFileType, ModelFileDownloadSpec] = {
 
 
 DEFAULT_REQUIRED_MODEL_TYPES: frozenset[ModelFileType] = frozenset(
+    {"checkpoint", "upsampler", "zit"}
+)
+
+# MLX-native model specs for Apple Silicon (Darwin).
+# These replace the CUDA models when running on Mac with MLX inference.
+MLX_MODEL_DOWNLOAD_SPECS: dict[ModelFileType, ModelFileDownloadSpec] = {
+    "checkpoint": ModelFileDownloadSpec(
+        relative_path=Path("mlx-ltx-2.3-q8"),
+        expected_size_bytes=59_000_000_000,
+        is_folder=True,
+        repo_id="dgrauet/ltx-2.3-mlx-q8",
+        description="LTX 2.3 (MLX Q8 quantized)",
+    ),
+    "upsampler": ModelFileDownloadSpec(
+        relative_path=Path("spatial_upscaler_x2_v1_1.safetensors"),
+        expected_size_bytes=996_000_000,
+        is_folder=False,
+        repo_id="dgrauet/ltx-2.3-mlx-q8",
+        description="2x Spatial Upscaler (MLX)",
+    ),
+    "text_encoder": ModelFileDownloadSpec(
+        relative_path=Path("mlx-gemma-3-12b-it-q4"),
+        expected_size_bytes=8_100_000_000,
+        is_folder=True,
+        repo_id="mlx-community/gemma-3-12b-it-4bit",
+        description="Gemma text encoder (MLX 4-bit)",
+    ),
+    "zit": ModelFileDownloadSpec(
+        relative_path=Path("flux2-klein-4b-mlx-4bit"),
+        expected_size_bytes=4_610_000_000,
+        is_folder=True,
+        repo_id="themindstudio/flux2-klein-4b-mlx-4bit",
+        description="Flux.2 Klein 4B (mflux 4-bit)",
+        ignore_patterns=("*.md", "*.png", "*.jpg", ".gitattributes", ".DS_Store"),
+    ),
+    "ic_lora": ModelFileDownloadSpec(
+        relative_path=Path("ltx-2.3-22b-ic-lora-union-control-ref0.5.safetensors"),
+        expected_size_bytes=654_465_352,
+        is_folder=False,
+        repo_id="Lightricks/LTX-2.3-22b-IC-LoRA-Union-Control",
+        description="Union IC-LoRA control model",
+    ),
+}
+
+MLX_REQUIRED_MODEL_TYPES: frozenset[ModelFileType] = frozenset(
     {"checkpoint", "upsampler", "zit"}
 )
 

@@ -9,6 +9,7 @@ class FakeGpuInfo:
     def __init__(self) -> None:
         self.cuda_available = False
         self.mps_available = False
+        self.mlx_available = False
         self.gpu_name: str | None = None
         self.vram_gb: int | None = None
         self.gpu_info: GpuTelemetryPayload = {"name": "Unknown", "vram": 0, "vramUsed": 0}
@@ -23,7 +24,7 @@ class FakeGpuInfo:
         return self.mps_available
 
     def get_gpu_available(self) -> bool:
-        return self.cuda_available or self.mps_available
+        return self.cuda_available or self.mps_available or self.mlx_available
 
     def get_device_name(self) -> str | None:
         return self.gpu_name

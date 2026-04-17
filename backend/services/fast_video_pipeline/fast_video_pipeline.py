@@ -2,12 +2,9 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, ClassVar, Literal, Protocol
+from typing import ClassVar, Literal, Protocol
 
 from api_types import ImageConditioningInput
-
-if TYPE_CHECKING:
-    import torch
 
 
 class FastVideoPipeline(Protocol):
@@ -18,7 +15,7 @@ class FastVideoPipeline(Protocol):
         checkpoint_path: str,
         gemma_root: str | None,
         upsampler_path: str,
-        device: torch.device,
+        device: object,
     ) -> "FastVideoPipeline":
         ...
 

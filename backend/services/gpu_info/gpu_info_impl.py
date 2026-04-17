@@ -9,8 +9,6 @@ import subprocess
 import sys
 from typing import Protocol, cast
 
-import torch
-
 from services.gpu_info.gpu_info import GpuTelemetryPayload
 
 logger = logging.getLogger(__name__)
@@ -21,7 +19,16 @@ class _CudaDeviceProperties(Protocol):
 
 
 class GpuInfoImpl:
-    """Wraps CUDA and MPS runtime queries."""
+    """Wraps CUDA, MPS, and MLX runtime queries."""
+
+    def _get_mlx_available(self) -> bool:
+        if platform.system() != "Darwin":
+            return False
+        try:
+            import mlx.core  # type: ignore[import-untyped]
+            return True
+        except ImportError:
+            return False
 
     def _get_macos_chip_name(self) -> str | None:
         if platform.system() != "Darwin":
@@ -76,6 +83,15 @@ class GpuInfoImpl:
                     "vramUsed": 0,
                 }
 
+        if self._get_mlx_available():
+            chip = self._get_macos_chip_name()
+            name = f"{chip} (MLX)" if chip else "Apple Silicon (MLX)"
+            return {
+                "name": name,
+                "vram": self._get_system_ram_mb(),
+                "vramUsed": 0,
+            }
+
         if self.get_mps_available():
             chip = self._get_macos_chip_name()
             name = f"{chip} (MPS)" if chip else "Apple Silicon (MPS)"
@@ -89,28 +105,33 @@ class GpuInfoImpl:
 
     def get_cuda_available(self) -> bool:
         try:
+            import torch
             return bool(torch.cuda.is_available())
         except Exception:
-            logger.warning("Failed to query CUDA availability", exc_info=True)
             return False
 
     def get_mps_available(self) -> bool:
         try:
+            import torch
             return bool(hasattr(torch.backends, "mps") and torch.backends.mps.is_available())
         except Exception:
-            logger.warning("Failed to query MPS availability", exc_info=True)
             return False
 
     def get_gpu_available(self) -> bool:
-        return self.get_cuda_available() or self.get_mps_available()
+        return self.get_cuda_available() or self.get_mps_available() or self._get_mlx_available()
 
     def get_device_name(self) -> str | None:
         if self.get_cuda_available():
             try:
+                import torch
                 return str(torch.cuda.get_device_name(0))
             except Exception:
                 logger.warning("Failed to query CUDA device name", exc_info=True)
                 return None
+
+        if self._get_mlx_available():
+            chip = self._get_macos_chip_name()
+            return f"{chip} (MLX)" if chip else "Apple Silicon (MLX)"
 
         if self.get_mps_available():
             chip = self._get_macos_chip_name()
@@ -121,6 +142,7 @@ class GpuInfoImpl:
     def get_vram_total_gb(self) -> int | None:
         if self.get_cuda_available():
             try:
+                import torch
                 properties = cast(
                     _CudaDeviceProperties,
                     torch.cuda.get_device_properties(0),  # type: ignore[reportUnknownMemberType]
@@ -130,13 +152,13 @@ class GpuInfoImpl:
                 logger.warning("Failed to query CUDA total VRAM", exc_info=True)
                 return None
 
-        if self.get_mps_available():
+        if self._get_mlx_available() or self.get_mps_available():
             try:
                 if sys.platform == "win32":
                     return None
                 return int((os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES")) // (1024**3))
             except Exception:
-                logger.warning("Failed to query MPS total memory", exc_info=True)
+                logger.warning("Failed to query unified memory total", exc_info=True)
                 return None
 
         return None

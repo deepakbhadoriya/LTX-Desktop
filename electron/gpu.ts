@@ -31,7 +31,7 @@ export async function checkGPU(): Promise<{ available: boolean; name?: string; v
   // Fallback: try direct Python check
   try {
     const pythonPath = getPythonPath()
-    const result = execSync(`"${pythonPath}" -c "import torch; cuda=torch.cuda.is_available(); mps=hasattr(torch.backends,'mps') and torch.backends.mps.is_available(); print(cuda or mps); print(torch.cuda.get_device_name(0) if cuda else ('Apple Silicon (MPS)' if mps else '')); print(torch.cuda.get_device_properties(0).total_memory // (1024**3) if cuda else 0)"`, {
+    const result = execSync(`"${pythonPath}" -c "import platform, subprocess; darwin=platform.system()=='Darwin'\nif darwin:\n    try:\n        chip=subprocess.run(['sysctl','-n','machdep.cpu.brand_string'],capture_output=True,text=True,timeout=5).stdout.strip()\n    except Exception:\n        chip='Apple Silicon'\n    import os; ram_gb=os.sysconf('SC_PAGE_SIZE')*os.sysconf('SC_PHYS_PAGES')//(1024**3)\n    print('True'); print(f'{chip} (MLX)'); print(ram_gb)\nelse:\n    import torch; cuda=torch.cuda.is_available(); mps=hasattr(torch.backends,'mps') and torch.backends.mps.is_available()\n    print(cuda or mps); print(torch.cuda.get_device_name(0) if cuda else ('Apple Silicon (MPS)' if mps else '')); print(torch.cuda.get_device_properties(0).total_memory//(1024**3) if cuda else 0)"`, {
       encoding: 'utf-8',
       timeout: 30000,
       windowsHide: true

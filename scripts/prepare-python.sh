@@ -203,7 +203,8 @@ else
   # Linux: keep .h/.cuh/.cu files for triton/sageattention JIT, but remove other build artifacts
   rm -rf "$OUTPUT_PATH/share" 2>/dev/null || true
 fi
-find "$OUTPUT_PATH" -name "*.pyi" -delete 2>/dev/null || true
+# NOTE: Do NOT delete .pyi files — librosa (and potentially other packages)
+# use __init__.pyi stubs as lazy-loading manifests at runtime.
 find "$OUTPUT_PATH" -name "*.pxd" -delete 2>/dev/null || true
 find "$OUTPUT_PATH" -name "*.pyx" -delete 2>/dev/null || true
 find "$OUTPUT_PATH" -name "*.hpp" -delete 2>/dev/null || true
@@ -227,37 +228,56 @@ import sys
 import platform
 print(f'  Python: {sys.version}')
 try:
-    import torch
-    print(f'  PyTorch: {torch.__version__}')
-    if platform.system() == 'Darwin':
-        mps = hasattr(torch.backends, 'mps') and torch.backends.mps.is_available()
-        print(f'  MPS available: {mps}')
-    elif platform.system() == 'Linux':
-        cuda = torch.cuda.is_available()
-        print(f'  CUDA available: {cuda}')
-        if cuda:
-            print(f'  CUDA version: {torch.version.cuda}')
-except ImportError as e:
-    print(f'  PyTorch import FAILED: {e}')
-    sys.exit(1)
-try:
     import fastapi
     print(f'  FastAPI: {fastapi.__version__}')
 except ImportError as e:
     print(f'  FastAPI import FAILED: {e}')
     sys.exit(1)
-try:
-    import diffusers
-    print(f'  Diffusers: {diffusers.__version__}')
-except ImportError as e:
-    print(f'  Diffusers import FAILED: {e}')
-    sys.exit(1)
-try:
-    from ltx_pipelines import distilled
-    print(f'  ltx-pipelines: OK')
-except ImportError as e:
-    print(f'  ltx-pipelines: FAILED - {e}')
-    sys.exit(1)
+if platform.system() == 'Darwin':
+    # MLX Apple Silicon dependencies
+    try:
+        import mlx.core
+        print(f'  MLX: OK')
+    except ImportError as e:
+        print(f'  MLX import FAILED: {e}')
+        sys.exit(1)
+    try:
+        import mlx_video
+        print(f'  mlx-video: OK')
+    except ImportError as e:
+        print(f'  mlx-video import FAILED: {e}')
+        sys.exit(1)
+    try:
+        import mflux
+        print(f'  mflux: OK')
+    except ImportError as e:
+        print(f'  mflux import FAILED: {e}')
+        sys.exit(1)
+else:
+    # CUDA/torch dependencies for Linux/Windows
+    try:
+        import torch
+        print(f'  PyTorch: {torch.__version__}')
+        if platform.system() == 'Linux':
+            cuda = torch.cuda.is_available()
+            print(f'  CUDA available: {cuda}')
+            if cuda:
+                print(f'  CUDA version: {torch.version.cuda}')
+    except ImportError as e:
+        print(f'  PyTorch import FAILED: {e}')
+        sys.exit(1)
+    try:
+        import diffusers
+        print(f'  Diffusers: {diffusers.__version__}')
+    except ImportError as e:
+        print(f'  Diffusers import FAILED: {e}')
+        sys.exit(1)
+    try:
+        from ltx_pipelines import distilled
+        print(f'  ltx-pipelines: OK')
+    except ImportError as e:
+        print(f'  ltx-pipelines: FAILED - {e}')
+        sys.exit(1)
 "
 
 # Calculate size

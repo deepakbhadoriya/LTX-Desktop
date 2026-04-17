@@ -214,8 +214,11 @@ class AppHandler:
             video_processor=video_processor,
             config=config,
         )
-
-        self.downloads.cleanup_downloading_dir()
+#       self.downloads.cleanup_downloading_dir()
+        # Note: we intentionally do NOT clean up .downloading/ here. Any
+        # partial files left over from a previous session represent resume
+        # state — ``huggingface_hub`` will pick them up on the next download
+        # call. Users can force a reset via POST /api/models/download/clear-partials.
         self.models.refresh_available_files()
 
 
@@ -241,46 +244,80 @@ class ServiceBundle:
 
 def build_default_service_bundle(config: RuntimeConfig) -> ServiceBundle:
     """Build real runtime services with lazy heavy imports isolated from tests."""
-    from services.fast_video_pipeline.ltx_fast_video_pipeline import LTXFastVideoPipeline
+    import platform
+
     from services.zit_api_client.zit_api_client_impl import ZitAPIClientImpl
-    from services.gpu_cleaner.torch_cleaner import TorchCleaner
     from services.gpu_info.gpu_info_impl import GpuInfoImpl
     from services.http_client.http_client_impl import HTTPClientImpl
-    from services.a2v_pipeline.ltx_a2v_pipeline import LTXa2vPipeline
-    from services.depth_processor_pipeline.midas_dpt_pipeline import MidasDPTPipeline
-    from services.ic_lora_pipeline.ltx_ic_lora_pipeline import LTXIcLoraPipeline
-    from services.image_generation_pipeline.zit_image_generation_pipeline import ZitImageGenerationPipeline
     from services.ltx_api_client.ltx_api_client_impl import LTXAPIClientImpl
     from services.model_downloader.hugging_face_downloader import HuggingFaceDownloader
-    from services.retake_pipeline.ltx_retake_pipeline import LTXRetakePipeline
-    from services.pose_processor_pipeline.dw_pose_pipeline import DWPosePipeline
     from services.task_runner.threading_runner import ThreadingRunner
-    from services.text_encoder.ltx_text_encoder import LTXTextEncoder
     from services.video_processor.video_processor_impl import VideoProcessorImpl
 
     http = HTTPClientImpl()
 
+    if platform.system() == "Darwin":
+        from services.fast_video_pipeline.mlx_video_pipeline import MLXVideoPipeline
+        from services.gpu_cleaner.mlx_cleaner import MLXCleaner
+        from services.text_encoder.mlx_text_encoder import MLXTextEncoder
+        from services.a2v_pipeline.mlx_a2v_pipeline import MLXA2VPipeline
+        from services.retake_pipeline.mlx_retake_pipeline import MLXRetakePipeline
+        from services.ic_lora_pipeline.mlx_ic_lora_pipeline import MLXIcLoraPipeline
+        from services.image_generation_pipeline.mlx_image_pipeline import MLXImageGenerationPipeline
+        from services.depth_processor_pipeline.mlx_depth_pipeline import MLXDepthPipeline
+        from services.pose_processor_pipeline.mlx_pose_pipeline import MLXPosePipeline
+
+        fast_pipeline_class: type[FastVideoPipeline] = MLXVideoPipeline  # pyright: ignore[reportAssignmentType]
+        gpu_cleaner_instance: GpuCleaner = MLXCleaner()
+        text_encoder_instance: TextEncoder = MLXTextEncoder()
+        image_pipeline_class: type[ImageGenerationPipeline] = MLXImageGenerationPipeline  # pyright: ignore[reportAssignmentType]
+        a2v_class: type[A2VPipeline] = MLXA2VPipeline  # pyright: ignore[reportAssignmentType]
+        retake_class: type[RetakePipeline] = MLXRetakePipeline  # pyright: ignore[reportAssignmentType]
+        ic_lora_class: type[IcLoraPipeline] = MLXIcLoraPipeline  # pyright: ignore[reportAssignmentType]
+        depth_class: type[DepthProcessorPipeline] = MLXDepthPipeline  # pyright: ignore[reportAssignmentType]
+        pose_class: type[PoseProcessorPipeline] = MLXPosePipeline  # pyright: ignore[reportAssignmentType]
+    else:
+        from services.fast_video_pipeline.ltx_fast_video_pipeline import LTXFastVideoPipeline
+        from services.gpu_cleaner.torch_cleaner import TorchCleaner
+        from services.text_encoder.ltx_text_encoder import LTXTextEncoder
+        from services.a2v_pipeline.ltx_a2v_pipeline import LTXa2vPipeline
+        from services.retake_pipeline.ltx_retake_pipeline import LTXRetakePipeline
+        from services.ic_lora_pipeline.ltx_ic_lora_pipeline import LTXIcLoraPipeline
+        from services.image_generation_pipeline.zit_image_generation_pipeline import ZitImageGenerationPipeline
+        from services.depth_processor_pipeline.midas_dpt_pipeline import MidasDPTPipeline
+        from services.pose_processor_pipeline.dw_pose_pipeline import DWPosePipeline
+
+        fast_pipeline_class = LTXFastVideoPipeline  # pyright: ignore[reportAssignmentType]
+        gpu_cleaner_instance = TorchCleaner(device=config.device)
+        text_encoder_instance = LTXTextEncoder(
+            device=config.device,  # pyright: ignore[reportArgumentType]
+            http=http,
+            ltx_api_base_url=config.ltx_api_base_url,
+        )
+        image_pipeline_class = ZitImageGenerationPipeline
+        a2v_class = LTXa2vPipeline  # pyright: ignore[reportAssignmentType]
+        retake_class = LTXRetakePipeline  # pyright: ignore[reportAssignmentType]
+        ic_lora_class = LTXIcLoraPipeline  # pyright: ignore[reportAssignmentType]
+        depth_class = MidasDPTPipeline  # pyright: ignore[reportAssignmentType]
+        pose_class = DWPosePipeline  # pyright: ignore[reportAssignmentType]
+
     return ServiceBundle(
         http=http,
-        gpu_cleaner=TorchCleaner(device=config.device),
+        gpu_cleaner=gpu_cleaner_instance,
         model_downloader=HuggingFaceDownloader(),
         gpu_info=GpuInfoImpl(),
         video_processor=VideoProcessorImpl(),
-        text_encoder=LTXTextEncoder(
-            device=config.device,
-            http=http,
-            ltx_api_base_url=config.ltx_api_base_url,
-        ),
+        text_encoder=text_encoder_instance,
         task_runner=ThreadingRunner(),
         ltx_api_client=LTXAPIClientImpl(http=http, ltx_api_base_url=config.ltx_api_base_url),
         zit_api_client=ZitAPIClientImpl(http=http),
-        fast_video_pipeline_class=LTXFastVideoPipeline,
-        image_generation_pipeline_class=ZitImageGenerationPipeline,
-        ic_lora_pipeline_class=LTXIcLoraPipeline,
-        depth_processor_pipeline_class=MidasDPTPipeline,
-        pose_processor_pipeline_class=DWPosePipeline,
-        a2v_pipeline_class=LTXa2vPipeline,
-        retake_pipeline_class=LTXRetakePipeline,
+        fast_video_pipeline_class=fast_pipeline_class,
+        image_generation_pipeline_class=image_pipeline_class,
+        ic_lora_pipeline_class=ic_lora_class,
+        depth_processor_pipeline_class=depth_class,  # pyright: ignore[reportAssignmentType]
+        pose_processor_pipeline_class=pose_class,  # pyright: ignore[reportAssignmentType]
+        a2v_pipeline_class=a2v_class,
+        retake_pipeline_class=retake_class,
     )
 
 

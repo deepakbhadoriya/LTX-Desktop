@@ -5,7 +5,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Protocol
 
 if TYPE_CHECKING:
-    import torch
     from ltx_core.components.guiders import MultiModalGuiderParams
     from ltx_core.loader import LoraPathStrengthAndSDOps
     from ltx_core.quantization import QuantizationPolicy
@@ -16,7 +15,7 @@ class RetakePipeline(Protocol):
     def create(
         checkpoint_path: str,
         gemma_root: str | None,
-        device: "torch.device",
+        device: object,
         *,
         loras: list["LoraPathStrengthAndSDOps"] | None = None,
         quantization: "QuantizationPolicy | None" = None,

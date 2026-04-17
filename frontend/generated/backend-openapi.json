@@ -204,6 +204,18 @@
         "title": "CancelNoActiveGenerationResponse",
         "type": "object"
       },
+      "ClearPartialDownloadsResponse": {
+        "properties": {
+          "status": {
+            "const": "ok",
+            "default": "ok",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "title": "ClearPartialDownloadsResponse",
+        "type": "object"
+      },
       "DownloadProgressCompleteResponse": {
         "properties": {
           "status": {
@@ -1964,6 +1976,28 @@
           }
         },
         "summary": "Route Model Download",
+        "tags": [
+          "models"
+        ]
+      }
+    },
+    "/api/models/download/clear-partials": {
+      "post": {
+        "description": "Wipe the .downloading/ staging dir, discarding all resume state.\n\nUse this to recover from corrupted partial downloads. Will 409 if a\ndownload is currently running.",
+        "operationId": "route_clear_partial_downloads_api_models_download_clear_partials_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClearPartialDownloadsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Route Clear Partial Downloads",
         "tags": [
           "models"
         ]

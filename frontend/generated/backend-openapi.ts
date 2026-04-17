@@ -169,6 +169,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/models/download/clear-partials": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Route Clear Partial Downloads
+         * @description Wipe the .downloading/ staging dir, discarding all resume state.
+         *
+         *     Use this to recover from corrupted partial downloads. Will 409 if a
+         *     download is currently running.
+         */
+        post: operations["route_clear_partial_downloads_api_models_download_clear_partials_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/models/download/progress": {
         parameters: {
             query?: never;
@@ -392,6 +415,15 @@ export interface components {
              * @constant
              */
             status: "no_active_generation";
+        };
+        /** ClearPartialDownloadsResponse */
+        ClearPartialDownloadsResponse: {
+            /**
+             * Status
+             * @default ok
+             * @constant
+             */
+            status: "ok";
         };
         /** DownloadProgressCompleteResponse */
         DownloadProgressCompleteResponse: {
@@ -1309,6 +1341,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    route_clear_partial_downloads_api_models_download_clear_partials_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClearPartialDownloadsResponse"];
                 };
             };
         };

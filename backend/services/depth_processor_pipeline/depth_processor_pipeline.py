@@ -2,19 +2,16 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Protocol
+from typing import Protocol
 
 from services.services_utils import FrameArray
-
-if TYPE_CHECKING:
-    import torch
 
 
 class DepthProcessorPipeline(Protocol):
     @staticmethod
     def create(
         model_path: str,
-        device: torch.device,
+        device: object,
     ) -> "DepthProcessorPipeline":
         ...
 

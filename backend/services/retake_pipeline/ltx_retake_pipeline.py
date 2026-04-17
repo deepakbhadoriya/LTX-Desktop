@@ -24,7 +24,7 @@ from ltx_core.quantization import QuantizationPolicy
 from ltx_core.types import Audio
 from ltx_pipelines.utils.media_io import encode_video, get_videostream_metadata
 
-from services.retake_pipeline.retake_pipeline import RetakePipeline
+
 
 
 
@@ -37,7 +37,7 @@ class LTXRetakePipeline:
         *,
         loras: list[LoraPathStrengthAndSDOps] | None = None,
         quantization: QuantizationPolicy | None = None,
-    ) -> RetakePipeline:
+    ) -> "LTXRetakePipeline":
         return LTXRetakePipeline(
             checkpoint_path=checkpoint_path,
             gemma_root=gemma_root,
